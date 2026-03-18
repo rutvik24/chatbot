@@ -1,0 +1,60 @@
+---
+description: Use Expo native UI (Compose/SwiftUI), platform-specific files, and Expo Router Color API for theming
+globs: "**/*.{ts,tsx}"
+alwaysApply: true
+---
+
+# Expo Native UI and Theming
+
+## UI stack
+
+- Build UI with **Expo native UI** only: prefer `@expo/ui` when used in the project, and Expo’s Compose/SwiftUI-backed APIs (e.g. `expo-router/unstable-native-tabs` `NativeTabs`, `expo-symbols`).
+- Do not introduce custom JS-only tab bars, generic third-party UI kits, or non-Expo native components when an Expo native equivalent exists.
+
+## Platform-specific files
+
+- Use **platform-specific extensions** so each platform gets the right implementation:
+  - `.ios.tsx` / `.android.tsx` for native-only code.
+  - `.native.tsx` for shared iOS + Android, `.web.tsx` for web.
+- In `src/app/`, a non-platform file must exist for each route (e.g. `about.tsx`) so deep linking stays universal; add `about.ios.tsx`, `about.web.tsx`, etc. as overrides.
+- Outside `src/app/`, use the same extensions (e.g. `components/app-tabs.ios.tsx`, `components/app-tabs.android.tsx`, `components/app-tabs.web.tsx`) and import by base name; Metro resolves the correct file.
+
+```tsx
+// ✅ GOOD: platform-specific components
+// components/app-tabs.ios.tsx, app-tabs.android.tsx, app-tabs.web.tsx
+import AppTabs from '@/components/app-tabs';
+
+// ✅ GOOD: route with fallback for deep links
+// app/about.tsx (default) + app/about.web.tsx
+```
+
+## Theming (native colors)
+
+- Use the **Expo Router Color API** for native colors: `import { Color } from 'expo-router'`.
+- Prefer semantic colors so light/dark and (on Android) dynamic color work:
+  - **iOS:** `Color.ios.systemBackground`, `Color.ios.label`, `Color.ios.secondaryLabel`, etc.
+  - **Android:** `Color.android.dynamic.surface`, `Color.android.dynamic.onSurface`, or `Color.android.material.*` for static roles.
+- Call `useColorScheme()` in any component that uses these colors so it re-renders when the system theme changes.
+- For cross-platform or web, use `Platform.select` with a `default` (e.g. app theme object) when `Color` has no namespace.
+
+```tsx
+// ✅ GOOD: theming with Expo Router Color API
+import { Color } from 'expo-router';
+import { View, Text, useColorScheme, Platform } from 'react-native';
+
+function ThemedScreen() {
+  useColorScheme();
+  const bg = Platform.select({
+    ios: Color.ios.systemBackground,
+    android: Color.android.dynamic.surface,
+    default: '#fff',
+  });
+  return <View style={{ backgroundColor: bg }}><Text>Hello</Text></View>;
+}
+```
+
+## Summary
+
+- Expo native UI only (e.g. @expo/ui, NativeTabs, expo-symbols).
+- Platform-specific files: `.ios.tsx`, `.android.tsx`, `.native.tsx`, `.web.tsx`.
+- Theming: `Color` from `expo-router` + `useColorScheme()` for theme updates.
