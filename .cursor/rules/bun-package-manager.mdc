@@ -1,0 +1,32 @@
+---
+description: Prefer Bun (bun/bunx) over npm (npm/npx) for all package management
+globs: "**/*"
+alwaysApply: true
+---
+
+# Use Bun Instead of npm
+
+- Use **Bun** for dependency management and scripts: `bun`, `bunx`.
+- Avoid **npm** and **npx** in commands, docs, and instructions.
+- When adding or updating dependencies, prefer Bun lockfile workflows and Bun commands.
+
+## Common command mappings
+
+```bash
+# install
+bun install
+
+# add deps
+bun add <pkg>
+bun add -d <pkg>
+
+# run scripts
+bun run <script>
+
+# execute one-off binaries
+bunx <bin>
+```
+
+## Notes
+
+- If a command in upstream docs uses `npm`/`npx`, translate it to the closest Bun equivalent.
