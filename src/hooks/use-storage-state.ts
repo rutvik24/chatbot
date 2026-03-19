@@ -25,9 +25,17 @@ export async function setStorageItemAsync(key: string, value: string | null) {
       console.error('Local storage is unavailable:', error);
     }
   } else if (value === null) {
-    await SecureStore.deleteItemAsync(key);
+    try {
+      await SecureStore.deleteItemAsync(key);
+    } catch (error) {
+      console.error('SecureStore delete failed:', error);
+    }
   } else {
-    await SecureStore.setItemAsync(key, value);
+    try {
+      await SecureStore.setItemAsync(key, value);
+    } catch (error) {
+      console.error('SecureStore set failed:', error);
+    }
   }
 }
 
@@ -46,9 +54,16 @@ export function useStorageState(key: string): UseStateHook<string> {
       return;
     }
 
-    SecureStore.getItemAsync(key).then((value) => {
-      setState(value);
-    });
+    (async () => {
+      try {
+        const value = await SecureStore.getItemAsync(key);
+        setState(value);
+      } catch (error) {
+        // Avoid uncaught promise rejections from SecureStore (invalid key, etc.).
+        console.error('SecureStore get failed:', error);
+        setState(null);
+      }
+    })();
   }, [key, setState]);
 
   const setValue = useCallback(

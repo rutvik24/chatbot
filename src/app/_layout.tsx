@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import { Pressable, StyleSheet, useColorScheme, View } from "react-native";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
+import ErrorBoundary from "@/components/error-boundary";
 import { AppText } from "@/components/common";
 import { SessionProvider, useSession } from "@/ctx/auth-context";
 import { useNativeThemeColors } from "@/hooks/use-native-theme-colors";
@@ -23,7 +24,9 @@ function asHeaderColor(value: unknown, fallback: string) {
 export default function RootLayout() {
   return (
     <SessionProvider>
-      <RootNavigator />
+      <ErrorBoundary>
+        <RootNavigator />
+      </ErrorBoundary>
     </SessionProvider>
   );
 }

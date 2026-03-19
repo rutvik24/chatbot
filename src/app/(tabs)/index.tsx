@@ -1,5 +1,6 @@
 import { SymbolView } from 'expo-symbols';
-import { useMemo, useState } from 'react';
+import * as SecureStore from 'expo-secure-store';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -11,25 +12,197 @@ import {
   useColorScheme,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 
 import { AppText } from '@/components/common';
+import { useSession } from '@/ctx/auth-context';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
+import { useStorageState } from '@/hooks/use-storage-state';
+import { type ChatMessage, streamChatCompletion } from '@/services/openrouter-chat';
+import { getOpenRouterApiKeyStorageKey } from '@/utils/openrouter-storage';
+import MarkdownMessage from '@/components/markdown-message';
 
 export default function HomeScreen() {
   useColorScheme();
+  const router = useRouter();
+  const { session, isLoading: isSessionLoading } = useSession();
   const colors = useNativeThemeColors();
   const [text, setText] = useState('');
-  const [messages, setMessages] = useState<string[]>([]);
+  const [messages, setMessages] = useState<{ id: string; role: ChatMessage['role']; content: string }[]>([]);
+  const storageKey = useMemo(() => getOpenRouterApiKeyStorageKey(session), [session]);
+  const [[isKeyLoading, storedOpenRouterKey], setOpenRouterKey] = useStorageState(storageKey);
+  const openRouterKey = storedOpenRouterKey ?? '';
 
-  const canSend = useMemo(() => text.trim().length > 0, [text]);
+  const [error, setError] = useState<string | null>(null);
+  const [isMigratingKey, setIsMigratingKey] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const listRef = useRef<FlatList<{ id: string; role: ChatMessage['role']; content: string }>>(null);
 
-  const handleSend = () => {
+  const canSend = useMemo(
+    () =>
+      text.trim().length > 0 &&
+      !isGenerating &&
+      !isKeyLoading &&
+      !isSessionLoading &&
+      !isMigratingKey &&
+      !!openRouterKey,
+    [text, isGenerating, isKeyLoading, isSessionLoading, isMigratingKey, openRouterKey]
+  );
+
+  useEffect(() => {
+    if (!listRef.current) return;
+    listRef.current.scrollToEnd({ animated: true });
+  }, [messages.length, isGenerating]);
+
+  useEffect(() => {
+    if (openRouterKey) {
+      setError(null);
+    }
+  }, [openRouterKey]);
+
+  useEffect(() => {
+    // Migrate old global key -> per-user key once.
+    const OLD_KEY = 'openrouter-api-key';
+    if (isKeyLoading) return;
+    if (!session) return;
+    if (storageKey === OLD_KEY) return;
+    if (storedOpenRouterKey) return; // per-user key already exists
+
+    let cancelled = false;
+    (async () => {
+      try {
+        setIsMigratingKey(true);
+        const next =
+          Platform.OS === 'web'
+            ? typeof localStorage !== 'undefined'
+              ? localStorage.getItem(OLD_KEY)
+              : null
+            : await SecureStore.getItemAsync(OLD_KEY);
+
+        if (!cancelled && next) {
+          setOpenRouterKey(next);
+        }
+      } finally {
+        if (!cancelled) setIsMigratingKey(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isKeyLoading, session, storageKey, storedOpenRouterKey, setOpenRouterKey]);
+
+  // If the user updates the key in the Settings screen, the tab might remain mounted.
+  // Re-read secure storage when the screen comes into focus.
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      const refreshKey = async () => {
+        try {
+          if (Platform.OS === 'web') {
+            const next = typeof localStorage !== 'undefined' ? localStorage.getItem(storageKey) : null;
+            if (isActive) setOpenRouterKey(next);
+            return;
+          }
+
+          const next = await SecureStore.getItemAsync(storageKey);
+          if (isActive) setOpenRouterKey(next);
+        } catch {
+          // Ignore refresh errors; the user can still enter a new key.
+        }
+      };
+
+      refreshKey();
+
+      return () => {
+        isActive = false;
+      };
+    }, [setOpenRouterKey, storageKey])
+  );
+
+  const makeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  const appendAssistantToken = (assistantId: string, tokenBuffer: string) => {
+    if (!tokenBuffer) return;
+    setMessages((previous) =>
+      previous.map((m) => (m.id === assistantId ? { ...m, content: m.content + tokenBuffer } : m))
+    );
+    // Keep the newest streamed tokens in view.
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToEnd({ animated: true });
+    });
+  };
+
+  const handleSend = async () => {
     const value = text.trim();
     if (!value) {
       return;
     }
-    setMessages((previous) => [...previous, value]);
+
+    if (isKeyLoading || isSessionLoading || isMigratingKey) {
+      // Storage is still loading; avoid showing a false "missing key" error.
+      return;
+    }
+
+    if (!openRouterKey) {
+      setError('OpenRouter API key for your account is missing. Add it now.');
+      return;
+    }
+
+    setError(null);
+
+    // Cancel any in-flight request.
+    abortRef.current?.abort();
+    const abortController = new AbortController();
+    abortRef.current = abortController;
+
+    const userMessageId = makeId();
+    const assistantMessageId = makeId();
+
+    const userMsg = { id: userMessageId, role: 'user' as const, content: value };
+    const assistantMsg = { id: assistantMessageId, role: 'assistant' as const, content: '' };
+
+    setMessages((previous) => [...previous, userMsg, assistantMsg]);
     setText('');
+    setIsGenerating(true);
+
+    // Use the existing conversation as context (small cap to keep costs down).
+    const history: ChatMessage[] = [...messages, { role: 'user', content: value }].slice(-10);
+
+    try {
+      let lastFlush = Date.now();
+      let buffer = '';
+
+      for await (const token of streamChatCompletion({
+        apiKey: openRouterKey,
+        messages: history,
+        model: 'openrouter/free',
+        signal: abortController.signal,
+      })) {
+        buffer += token;
+        const now = Date.now();
+        if (now - lastFlush >= 40) {
+          appendAssistantToken(assistantMessageId, buffer);
+          buffer = '';
+          lastFlush = now;
+        }
+      }
+
+      appendAssistantToken(assistantMessageId, buffer);
+      buffer = '';
+    } catch (e) {
+      const message = (e as any)?.message;
+      const friendly = typeof message === 'string' && message ? message : 'Failed to generate a response.';
+      setMessages((previous) =>
+        previous.map((m) => (m.id === assistantMessageId ? { ...m, content: `\n\n${friendly}` } : m))
+      );
+      setError(friendly);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -39,13 +212,22 @@ export default function HomeScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}>
         <FlatList
+          ref={listRef}
           data={messages}
-          keyExtractor={(_, index) => `${index}`}
+          keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messagesContent}
           keyboardShouldPersistTaps="handled"
           renderItem={({ item }) => (
-            <View style={[styles.messageBubble, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <AppText>{item}</AppText>
+            <View
+              style={[
+                styles.messageBubble,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  alignSelf: item.role === 'user' ? 'flex-end' : 'flex-start',
+                },
+              ]}>
+              <MarkdownMessage markdown={item.content || (item.role === 'assistant' ? '...' : '')} />
             </View>
           )}
         />
@@ -76,6 +258,15 @@ export default function HomeScreen() {
             />
           </Pressable>
         </View>
+
+        {error ? <AppText style={[styles.errorText, { color: colors.primary }]}>{error}</AppText> : null}
+        {error === 'OpenRouter API key for your account is missing. Add it now.' ? (
+          <Pressable
+            onPress={() => router.push('/settings-openrouter')}
+            style={styles.errorLink}>
+            <AppText style={[styles.errorLinkText, { color: colors.primary }]}>Enter API key</AppText>
+          </Pressable>
+        ) : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -98,8 +289,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    alignSelf: 'flex-start',
     maxWidth: '85%',
+  },
+  errorText: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  errorLink: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  errorLinkText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   composer: {
     margin: 12,
