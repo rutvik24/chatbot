@@ -3,12 +3,22 @@ import { Pressable, StyleSheet, type PressableProps } from 'react-native';
 import AppText from '@/components/common/app-text';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 
+/**
+ * Props for {@link AppButton}.
+ *
+ * @example
+ * <AppButton label="Save" onPress={handleSave} />
+ * <AppButton label="Cancel" variant="secondary" onPress={handleCancel} />
+ */
 export type AppButtonProps = PressableProps & {
   label: string;
   /** `secondary` = outlined / muted (e.g. cancel, reset). Default is filled primary. */
   variant?: 'primary' | 'secondary';
 };
 
+/**
+ * Primary CTA button with theming and a `secondary` outlined variant.
+ */
 export default function AppButton({
   label,
   disabled,

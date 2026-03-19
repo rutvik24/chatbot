@@ -16,6 +16,13 @@ import { ThemedView } from './themed-view';
 
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 
+/**
+ * Web tab bar implementation for Expo Router.
+ *
+ * This provides a styled tab list and triggers navigation for:
+ * - `href="/"` (Chat)
+ * - `href="/settings"` (Settings)
+ */
 export default function AppTabs() {
   return (
     <Tabs>
@@ -31,6 +38,9 @@ export default function AppTabs() {
   );
 }
 
+/**
+ * Tab button UI used inside {@link AppTabs}.
+ */
 export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
   return (
     <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
@@ -45,6 +55,10 @@ export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps
   );
 }
 
+/**
+ * Custom tab list wrapper that includes a small “Expo Starter” brand block
+ * and an external link.
+ */
 export function CustomTabList(props: TabListProps) {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];

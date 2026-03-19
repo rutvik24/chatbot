@@ -7,7 +7,16 @@ import * as Clipboard from 'expo-clipboard';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 import { showToast } from '@/utils/toast-bus';
 
+/**
+ * Props for {@link MarkdownMessage}.
+ *
+ * `markdown` is rendered using `react-native-markdown-display` and `markdown-it`.
+ * Fenced code blocks (```...```) and indented code blocks include a "Copy" button.
+ */
 export type MarkdownMessageProps = Omit<MarkdownProps, 'children'> & {
+  /**
+   * Markdown string to render (links, headings, lists, and code blocks).
+   */
   markdown: string;
 };
 
@@ -60,7 +69,17 @@ function CopyableCodeBlock({
   );
 }
 
-export default function MarkdownMessage({ markdown, ...rest }: MarkdownMessageProps) {
+/**
+ * Renders a markdown message with theming support and code-copy UI.
+ *
+ * Typical usage:
+ * - Render assistant chat messages in the chat screen.
+ * - Display markdown from any OpenAI-compatible model.
+ */
+export default function MarkdownMessage({
+  markdown,
+  ...rest
+}: MarkdownMessageProps) {
   const colors = useNativeThemeColors();
 
   const markdownit = useMemo(

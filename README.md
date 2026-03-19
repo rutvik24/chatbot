@@ -1,56 +1,56 @@
-# Welcome to your Expo app 👋
+# Chat App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo Router chat app with per-user OpenAI-compatible AI streaming (OpenRouter by default).
 
-## Get started
+## Docs Navigation
 
-1. Install dependencies
+- [Overview (this README)](#chat-app)
+- [`docs/README.md`](docs/README.md)
+- [`docs/setup.md`](docs/setup.md)
+- [`docs/project-structure.md`](docs/project-structure.md)
+- [`docs/current-progress.md`](docs/current-progress.md)
+- [`docs/ai-integration.md`](docs/ai-integration.md)
+- [`docs/auth.md`](docs/auth.md)
+- [`docs/security-and-secrets.md`](docs/security-and-secrets.md)
+- [`docs/theming.md`](docs/theming.md)
 
-   ```bash
-   npm install
-   ```
+## Current Progress (Snapshot)
 
-2. Start the app
+Implemented features:
+- Authentication flow (sign in / sign up / change password) backed by local demo storage via `src/ctx/auth-context.tsx`.
+- Profile editing in Settings (saved locally per account) via `src/app/(auth)/settings-profile.tsx`.
+- AI Settings screen to store an OpenAI-compatible API key + base URL securely on-device via `src/app/(auth)/settings-ai.tsx`.
+- Chat UI with streaming responses from OpenAI-compatible providers (OpenRouter by default) using `src/services/openrouter-chat.ts`.
+- Markdown rendering for assistant messages, including copy-to-clipboard for code blocks (`src/components/markdown-message.tsx`).
+- Native light/dark theming via Expo Router `Color` (`src/hooks/use-native-theme-colors.ts`).
 
-   ```bash
-   npx expo start
-   ```
+Known demo limitations to address next:
+- Auth is a mock (no real backend). Passwords and sessions are stored locally.
+- Forgot password is mocked (no email is sent).
+- Chat messages are currently kept in-memory (no conversation history persistence).
+- Model selection is not exposed in UI yet (model is hardcoded to `openrouter/free` in the chat service).
 
-In the output, you'll find options to open the app in a
+## Quick Start
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
+1. Install deps
 ```bash
-npm run reset-project
+bun install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+2. Start (use your preferred target)
+```bash
+bun run start
+# or
+bun run android
+bun run ios
+bun run web
+```
 
-### Other setup steps
+3. Lint
+```bash
+bun run lint
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## License
 
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+This project is available under the terms of the `LICENSE` file in the repository root (MIT).

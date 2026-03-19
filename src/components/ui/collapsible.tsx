@@ -8,7 +8,21 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-export function Collapsible({ children, title }: PropsWithChildren & { title: string }) {
+/**
+ * Simple expand/collapse section.
+ *
+ * @example
+ * <Collapsible title="More details">
+ *   <Text>Hidden until expanded</Text>
+ * </Collapsible>
+ */
+export function Collapsible({
+  children,
+  title,
+}: PropsWithChildren & {
+  /** Label shown next to the chevron. */
+  title: string;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const theme = useTheme();
 

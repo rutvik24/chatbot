@@ -5,6 +5,9 @@ import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 
 type AuthIllustrationVariant = 'signIn' | 'signUp' | 'forgotPassword' | 'changePassword';
 
+/**
+ * Which illustration to render in the auth screens.
+ */
 type AuthIllustrationProps = {
   variant: AuthIllustrationVariant;
 };
@@ -13,7 +16,14 @@ function asSvgColor(value: unknown, fallback: string) {
   return typeof value === 'string' ? value : fallback;
 }
 
-export default function AuthIllustration({ variant }: AuthIllustrationProps) {
+/**
+ * Decorative SVG-like illustration used on authentication screens.
+ *
+ * Use this in sign-in / sign-up / forgot-password / change-password forms.
+ */
+export default function AuthIllustration({
+  variant,
+}: AuthIllustrationProps) {
   const colors = useNativeThemeColors();
   const { width } = useWindowDimensions();
   const illustrationHeight = Math.max(92, Math.min(156, width * 0.26));

@@ -4,6 +4,11 @@ import { useColorScheme } from 'react-native';
 
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 
+/**
+ * Native tab bar for the logged-in experience (Chat + Settings).
+ *
+ * Uses `expo-router/unstable-native-tabs` so it stays native-feeling on iOS/Android.
+ */
 export default function AppTabs() {
   useColorScheme();
   const colors = useNativeThemeColors();

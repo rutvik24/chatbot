@@ -6,6 +6,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppButton, AppText } from '@/components/common';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 
+/**
+ * React error boundary for catching render-time crashes.
+ *
+ * Wrap this around parts of the UI that should fail gracefully.
+ */
 function ErrorFallback({ error, onReset }: { error: unknown; onReset: () => void }) {
   const colors = useNativeThemeColors();
   const message = error instanceof Error ? error.message : 'Unknown error';
@@ -62,7 +67,17 @@ type ErrorBoundaryState = {
   error: unknown;
 };
 
+/**
+ * Error boundary component.
+ *
+ * Use it to prevent a render-time crash from taking down the whole app.
+ * When a descendant throws, the boundary shows a fallback UI with a
+ * "Try again" button that resets the boundary state.
+ */
 export default class ErrorBoundary extends React.Component<{
+  /**
+   * Children to render inside the boundary.
+   */
   children: React.ReactNode;
 }> {
   state: ErrorBoundaryState = { hasError: false, error: null };

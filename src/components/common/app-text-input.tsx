@@ -5,12 +5,29 @@ import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'rea
 import AppText from '@/components/common/app-text';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 
+/**
+ * Props for {@link AppTextInput}.
+ *
+ * Extends React Native `TextInputProps` with:
+ * - `label`: optional field label
+ * - `error`: optional error message shown below the input
+ * - `isPasswordField`: enables secure text entry + a visibility toggle
+ */
 export type AppTextInputProps = TextInputProps & {
   label?: string;
   error?: string;
   isPasswordField?: boolean;
 };
 
+/**
+ * Labeled text input with theming and optional password visibility toggle.
+ *
+ * Example:
+ * ```tsx
+ * <AppTextInput label="Email" keyboardType="email-address" />
+ * <AppTextInput label="Password" isPasswordField />
+ * ```
+ */
 const AppTextInput = forwardRef<TextInput, AppTextInputProps>(function AppTextInput(
   { label, error, isPasswordField = false, secureTextEntry, style, ...props },
   ref
@@ -49,6 +66,9 @@ const AppTextInput = forwardRef<TextInput, AppTextInputProps>(function AppTextIn
   );
 });
 
+/**
+ * @see {@link AppTextInputProps} for supported props.
+ */
 export default AppTextInput;
 
 const styles = StyleSheet.create({

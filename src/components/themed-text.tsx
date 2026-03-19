@@ -3,11 +3,20 @@ import { Platform, StyleSheet, Text, type TextProps } from 'react-native';
 import { Fonts, ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
+/**
+ * Props for {@link ThemedText}.
+ *
+ * `type` controls typography presets (default, title, small, link, etc.).
+ * `themeColor` maps to the current theme color palette.
+ */
 export type ThemedTextProps = TextProps & {
   type?: 'default' | 'title' | 'small' | 'smallBold' | 'subtitle' | 'link' | 'linkPrimary' | 'code';
   themeColor?: ThemeColor;
 };
 
+/**
+ * Text component that applies theme-aware color and typography presets.
+ */
 export function ThemedText({ style, type = 'default', themeColor, ...rest }: ThemedTextProps) {
   const theme = useTheme();
 

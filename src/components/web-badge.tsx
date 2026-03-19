@@ -8,6 +8,11 @@ import { ThemedView } from './themed-view';
 
 import { Spacing } from '@/constants/theme';
 
+/**
+ * Simple web-only badge shown in the tab header.
+ *
+ * Uses the Expo SDK version and switches the image based on light/dark mode.
+ */
 export function WebBadge() {
   const scheme = useColorScheme();
 

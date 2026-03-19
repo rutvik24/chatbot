@@ -7,6 +7,11 @@ import { scheduleOnRN } from 'react-native-worklets';
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
 const DURATION = 600;
 
+/**
+ * Animated splash overlay used during app startup.
+ *
+ * On completion it hides itself (sets `visible` to false).
+ */
 export function AnimatedSplashOverlay() {
   const [visible, setVisible] = useState(true);
 
@@ -80,6 +85,11 @@ const glowKeyframe = new Keyframe({
   },
 });
 
+/**
+ * Startup logo animation shown beneath/alongside the splash overlay.
+ *
+ * Uses `react-native-reanimated` keyframes for the glow/background/logo.
+ */
 export function AnimatedIcon() {
   return (
     <View style={styles.iconContainer}>

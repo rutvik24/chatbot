@@ -8,6 +8,12 @@ import {
   type Toast,
 } from '@/utils/toast-bus';
 
+/**
+ * Global toast overlay.
+ *
+ * Listens to `showToast()` events from `src/utils/toast-bus.ts` and displays a
+ * temporary confirmation message at the bottom of the screen.
+ */
 export default function ToastOverlay() {
   const colors = useNativeThemeColors();
   const [toast, setToast] = useState<Toast | null>(null);

@@ -4,10 +4,21 @@ import AppText from '@/components/common/app-text';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 import { getPasswordChecks } from '@/utils/password-validation';
 
+/**
+ * Props for {@link PasswordChecklist}.
+ */
 type PasswordChecklistProps = {
+  /**
+   * Password to validate against the checklist rules.
+   */
   password: string;
 };
 
+/**
+ * Displays which password-strength rules are currently satisfied.
+ *
+ * Intended for sign-up and password-change forms.
+ */
 export default function PasswordChecklist({ password }: PasswordChecklistProps) {
   const colors = useNativeThemeColors();
   const checks = getPasswordChecks(password);
