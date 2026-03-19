@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppButton, AppText, AppTextInput, AuthIllustration } from '@/components/common';
 import { useSession } from '@/ctx/auth-context';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
+import { showToast } from '@/utils/toast-bus';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -40,6 +41,7 @@ export default function ForgotPasswordScreen() {
     }
 
     setSuccess('Reset link sent (mock). Check your inbox in a real backend integration.');
+    showToast('Reset link sent (mock). Check your inbox.');
   };
 
   return (

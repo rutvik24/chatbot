@@ -11,6 +11,7 @@ import { Pressable, StyleSheet, useColorScheme, View } from "react-native";
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import ErrorBoundary from "@/components/error-boundary";
 import { AppText } from "@/components/common";
+import ToastOverlay from "@/components/toast-overlay";
 import { SessionProvider, useSession } from "@/ctx/auth-context";
 import { useNativeThemeColors } from "@/hooks/use-native-theme-colors";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -56,6 +57,7 @@ function RootNavigator() {
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
       <AnimatedSplashOverlay />
+      <ToastOverlay />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -111,7 +113,7 @@ function RootNavigator() {
             options={{ headerShown: true }}
           />
           <Stack.Screen
-            name="(auth)/settings-openrouter"
+            name="(auth)/settings-ai"
             options={{ headerShown: true }}
           />
         </Stack.Protected>

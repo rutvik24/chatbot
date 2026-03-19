@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { Modal, Pressable, SectionList, StyleSheet, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,7 +10,7 @@ import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 
 type SettingsItem = {
   label: string;
-  href: '/settings-profile' | '/settings-openrouter';
+  href: '/settings-profile' | '/settings-ai';
 };
 
 export default function SettingsScreen() {
@@ -17,6 +18,11 @@ export default function SettingsScreen() {
   const colors = useNativeThemeColors();
   const { signOut } = useSession();
   const [isSignOutModalVisible, setIsSignOutModalVisible] = useState(false);
+  const [shouldTestBoundary, setShouldTestBoundary] = useState(false);
+
+  if (shouldTestBoundary) {
+    throw new Error('Test ErrorBoundary');
+  }
 
   const sections: { title: string; data: SettingsItem[] }[] = [
     {
@@ -25,7 +31,7 @@ export default function SettingsScreen() {
     },
     {
       title: 'AI',
-      data: [{ label: 'OpenRouter API Key', href: '/settings-openrouter' }],
+      data: [{ label: 'AI settings', href: '/settings-ai' }],
     },
   ];
 
@@ -47,16 +53,47 @@ export default function SettingsScreen() {
         )}
         ListFooterComponent={
           <View style={styles.footerActions}>
-            <AppText style={styles.sectionTitle}>Actions</AppText>
+            <AppText style={styles.sectionTitle}>Account Actions</AppText>
+
+            <Pressable
+              onPress={() => {
+                setShouldTestBoundary(true);
+                // Reset quickly so pressing "Try again" actually clears the error state.
+                setTimeout(() => setShouldTestBoundary(false), 0);
+              }}
+              style={[
+                styles.itemRow,
+                { borderColor: colors.border, backgroundColor: colors.surface },
+              ]}>
+              <AppText>Test ErrorBoundary</AppText>
+            </Pressable>
+
             <Pressable
               onPress={() => router.push('/change-password')}
-              style={[styles.actionButton, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              style={[
+                styles.itemRow,
+                { borderColor: colors.border, backgroundColor: colors.surface },
+              ]}>
               <AppText>Change password</AppText>
             </Pressable>
+
             <Pressable
               onPress={() => setIsSignOutModalVisible(true)}
-              style={[styles.actionButton, { borderColor: colors.error, backgroundColor: colors.error }]}>
-              <AppText style={styles.signOutText}>Sign out</AppText>
+              style={[
+                styles.itemRow,
+                styles.signOutRow,
+                { borderColor: colors.error, backgroundColor: colors.error },
+              ]}>
+              <AppText style={[styles.signOutText, styles.signOutLabel]}>Sign out</AppText>
+              <SymbolView
+                name={{
+                  ios: 'rectangle.portrait.and.arrow.right',
+                  android: 'logout',
+                  web: 'logout',
+                }}
+                size={20}
+                tintColor="#FFFFFF"
+              />
             </Pressable>
           </View>
         }
@@ -120,13 +157,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
     gap: 8,
   },
-  actionButton: {
-    minHeight: 48,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+  signOutRow: {
+    justifyContent: 'space-between',
+  },
+  signOutLabel: {
+    flex: 1,
   },
   signOutText: {
     color: '#FFFFFF',

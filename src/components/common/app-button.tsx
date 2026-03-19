@@ -5,10 +5,26 @@ import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 
 export type AppButtonProps = PressableProps & {
   label: string;
+  /** `secondary` = outlined / muted (e.g. cancel, reset). Default is filled primary. */
+  variant?: 'primary' | 'secondary';
 };
 
-export default function AppButton({ label, disabled, style, ...props }: AppButtonProps) {
+export default function AppButton({
+  label,
+  disabled,
+  variant = 'primary',
+  style,
+  ...props
+}: AppButtonProps) {
   const colors = useNativeThemeColors();
+  const isSecondary = variant === 'secondary';
+
+  const labelColor = (() => {
+    if (disabled) {
+      return isSecondary ? colors.secondaryText : '#FFFFFF';
+    }
+    return isSecondary ? colors.primary : '#FFFFFF';
+  })();
 
   return (
     <Pressable
@@ -17,12 +33,26 @@ export default function AppButton({ label, disabled, style, ...props }: AppButto
       style={(state) => [
         styles.button,
         {
-          backgroundColor: disabled ? colors.border : colors.primary,
+          backgroundColor: disabled
+            ? isSecondary
+              ? colors.surface
+              : colors.border
+            : isSecondary
+              ? colors.surface
+              : colors.primary,
+          borderWidth: isSecondary ? 1 : 0,
+          borderColor: disabled
+            ? colors.border
+            : isSecondary
+              ? colors.primary
+              : 'transparent',
           opacity: state.pressed ? 0.85 : 1,
         },
         typeof style === 'function' ? style(state) : style,
       ]}>
-      <AppText style={styles.label}>{label}</AppText>
+      <AppText style={[styles.label, { color: labelColor }]} numberOfLines={2}>
+        {label}
+      </AppText>
     </Pressable>
   );
 }
@@ -38,5 +68,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+    textAlign: 'center',
   },
 });

@@ -9,7 +9,6 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Text,
   TextInput,
   View,
   useColorScheme,
@@ -25,8 +24,18 @@ import {
   type ChatMessage,
   streamChatCompletion,
 } from "@/services/openrouter-chat";
-import { getOpenRouterApiKeyStorageKey } from "@/utils/openrouter-storage";
-import { subscribeToast, type Toast } from "@/utils/toast-bus";
+import { resolveOpenRouterApiKey } from "@/utils/openrouter-env-defaults";
+import {
+  GLOBAL_API_KEY_STORAGE_KEY,
+  clearGlobalApiKeyStorage,
+  getOpenAiCompatibleBaseUrlStorageKey,
+  getOpenRouterApiKeyStorageKey,
+} from "@/utils/openrouter-storage";
+import { getFriendlyChatProviderError } from "@/utils/provider-chat-error";
+import {
+  buildUserPersonalizationSystemMessage,
+  getUserProfileStorageKey,
+} from "@/utils/user-profile-chat";
 
 export default function HomeScreen() {
   useColorScheme();
@@ -34,8 +43,6 @@ export default function HomeScreen() {
   const { session, isLoading: isSessionLoading } = useSession();
   const colors = useNativeThemeColors();
   const [text, setText] = useState("");
-  const [toast, setToast] = useState<Toast | null>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [messages, setMessages] = useState<
     { id: string; role: ChatMessage["role"]; content: string }[]
   >([]);
@@ -43,9 +50,24 @@ export default function HomeScreen() {
     () => getOpenRouterApiKeyStorageKey(session),
     [session],
   );
+  const baseUrlStorageKey = useMemo(
+    () => getOpenAiCompatibleBaseUrlStorageKey(session),
+    [session],
+  );
+  const profileStorageKey = useMemo(
+    () => getUserProfileStorageKey(session),
+    [session],
+  );
   const [[isKeyLoading, storedOpenRouterKey], setOpenRouterKey] =
     useStorageState(storageKey);
-  const openRouterKey = storedOpenRouterKey ?? "";
+  const [[, storedOpenAiBaseUrl], setOpenAiBaseUrl] =
+    useStorageState(baseUrlStorageKey);
+  const [[, storedProfileJson], setProfileJson] =
+    useStorageState(profileStorageKey);
+  const effectiveOpenRouterKey = useMemo(
+    () => resolveOpenRouterApiKey(storedOpenRouterKey),
+    [storedOpenRouterKey],
+  );
 
   const [error, setError] = useState<string | null>(null);
   const [isMigratingKey, setIsMigratingKey] = useState(false);
@@ -60,17 +82,15 @@ export default function HomeScreen() {
     () =>
       text.trim().length > 0 &&
       !isGenerating &&
-      !isKeyLoading &&
       !isSessionLoading &&
       !isMigratingKey &&
-      !!openRouterKey,
+      !!effectiveOpenRouterKey.trim(),
     [
       text,
       isGenerating,
-      isKeyLoading,
       isSessionLoading,
       isMigratingKey,
-      openRouterKey,
+      effectiveOpenRouterKey,
     ],
   );
 
@@ -80,38 +100,17 @@ export default function HomeScreen() {
   }, [messages.length, isGenerating]);
 
   useEffect(() => {
-    if (openRouterKey) {
+    if (effectiveOpenRouterKey.trim()) {
       setError(null);
     }
-  }, [openRouterKey]);
+  }, [effectiveOpenRouterKey]);
 
   useEffect(() => {
-    const unsubscribe = subscribeToast((message) => {
-      setToast(message);
-
-      if (toastTimerRef.current) {
-        clearTimeout(toastTimerRef.current);
-      }
-
-      toastTimerRef.current = setTimeout(() => {
-        setToast(null);
-      }, message.durationMs ?? 1200);
-    });
-
-    return () => {
-      unsubscribe();
-      if (toastTimerRef.current) {
-        clearTimeout(toastTimerRef.current);
-      }
-    };
-  }, [setToast]);
-
-  useEffect(() => {
-    // Migrate old global key -> per-user key once.
-    const OLD_KEY = "openrouter-api-key";
+    // Migrate global API key -> per-user key once, then remove global storage
+    // so clearing the per-user key does not re-import the old global value.
     if (isKeyLoading) return;
     if (!session) return;
-    if (storageKey === OLD_KEY) return;
+    if (storageKey === GLOBAL_API_KEY_STORAGE_KEY) return;
     if (storedOpenRouterKey) return; // per-user key already exists
 
     let cancelled = false;
@@ -121,12 +120,13 @@ export default function HomeScreen() {
         const next =
           Platform.OS === "web"
             ? typeof localStorage !== "undefined"
-              ? localStorage.getItem(OLD_KEY)
+              ? localStorage.getItem(GLOBAL_API_KEY_STORAGE_KEY)
               : null
-            : await SecureStore.getItemAsync(OLD_KEY);
+            : await SecureStore.getItemAsync(GLOBAL_API_KEY_STORAGE_KEY);
 
         if (!cancelled && next) {
           setOpenRouterKey(next);
+          await clearGlobalApiKeyStorage();
         }
       } finally {
         if (!cancelled) setIsMigratingKey(false);
@@ -153,16 +153,28 @@ export default function HomeScreen() {
       const refreshKey = async () => {
         try {
           if (Platform.OS === "web") {
-            const next =
-              typeof localStorage !== "undefined"
-                ? localStorage.getItem(storageKey)
-                : null;
-            if (isActive) setOpenRouterKey(next);
+            if (typeof localStorage === "undefined") return;
+            const keyNext = localStorage.getItem(storageKey);
+            const urlNext = localStorage.getItem(baseUrlStorageKey);
+            const profileNext = localStorage.getItem(profileStorageKey);
+            if (isActive) {
+              setOpenRouterKey(keyNext);
+              setOpenAiBaseUrl(urlNext);
+              setProfileJson(profileNext);
+            }
             return;
           }
 
-          const next = await SecureStore.getItemAsync(storageKey);
-          if (isActive) setOpenRouterKey(next);
+          const [keyNext, urlNext, profileNext] = await Promise.all([
+            SecureStore.getItemAsync(storageKey),
+            SecureStore.getItemAsync(baseUrlStorageKey),
+            SecureStore.getItemAsync(profileStorageKey),
+          ]);
+          if (isActive) {
+            setOpenRouterKey(keyNext);
+            setOpenAiBaseUrl(urlNext);
+            setProfileJson(profileNext);
+          }
         } catch {
           // Ignore refresh errors; the user can still enter a new key.
         }
@@ -173,7 +185,14 @@ export default function HomeScreen() {
       return () => {
         isActive = false;
       };
-    }, [setOpenRouterKey, storageKey]),
+    }, [
+      baseUrlStorageKey,
+      profileStorageKey,
+      setOpenAiBaseUrl,
+      setOpenRouterKey,
+      setProfileJson,
+      storageKey,
+    ]),
   );
 
   const makeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -197,12 +216,19 @@ export default function HomeScreen() {
       return;
     }
 
-    if (isKeyLoading || isSessionLoading || isMigratingKey) {
-      // Storage is still loading; avoid showing a false "missing key" error.
+    if (isSessionLoading || isMigratingKey) {
       return;
     }
 
-    if (!openRouterKey) {
+    // Wait for key storage unless an env default is available.
+    if (
+      isKeyLoading &&
+      !resolveOpenRouterApiKey(storedOpenRouterKey).trim()
+    ) {
+      return;
+    }
+
+    if (!effectiveOpenRouterKey.trim()) {
       setError("OpenRouter API key for your account is missing. Add it now.");
       return;
     }
@@ -232,18 +258,45 @@ export default function HomeScreen() {
     setText("");
     setIsGenerating(true);
 
-    // Use the existing conversation as context (small cap to keep costs down).
-    const history: ChatMessage[] = [
+    // Re-read Profile from storage so name/email match what the user just saved
+    // (React state can lag until the tab regains focus).
+    let profileJsonForChat: string | null = storedProfileJson;
+    try {
+      if (Platform.OS === "web") {
+        if (typeof localStorage !== "undefined") {
+          profileJsonForChat = localStorage.getItem(profileStorageKey);
+        }
+      } else {
+        profileJsonForChat =
+          await SecureStore.getItemAsync(profileStorageKey);
+      }
+      if (profileJsonForChat !== storedProfileJson) {
+        setProfileJson(profileJsonForChat);
+      }
+    } catch {
+      // Keep in-memory profile if storage read fails.
+    }
+
+    // Recent turns + system context from Profile + session (authoritative user facts).
+    const personalization = buildUserPersonalizationSystemMessage(
+      session,
+      profileJsonForChat,
+    );
+    const recentTurns: ChatMessage[] = [
       ...messages.map(({ role, content }) => ({ role, content })),
       { role: "user" as const, content: value },
     ].slice(-10);
+    const history: ChatMessage[] = personalization
+      ? [personalization, ...recentTurns]
+      : recentTurns;
 
     try {
       let lastFlush = Date.now();
       let buffer = "";
 
       for await (const token of streamChatCompletion({
-        apiKey: openRouterKey,
+        apiKey: effectiveOpenRouterKey,
+        baseURL: storedOpenAiBaseUrl,
         messages: history,
         model: "openrouter/free",
         signal: abortController.signal,
@@ -260,11 +313,7 @@ export default function HomeScreen() {
       appendAssistantToken(assistantMessageId, buffer);
       buffer = "";
     } catch (e) {
-      const message = (e as any)?.message;
-      const friendly =
-        typeof message === "string" && message
-          ? message
-          : "Failed to generate a response.";
+      const friendly = getFriendlyChatProviderError(e);
       setMessages((previous) =>
         previous.map((m) =>
           m.id === assistantMessageId
@@ -317,30 +366,6 @@ export default function HomeScreen() {
           )}
         />
 
-        {toast ? (
-          <View
-            pointerEvents="box-none"
-            style={styles.toast}
-          >
-            <View style={styles.toastInner}>
-              <Text style={[styles.toastIcon, { color: colors.primary }]}>✓</Text>
-              <Text style={styles.toastText}>{toast.message}</Text>
-
-              {toast.action ? (
-                <Pressable
-                  onPress={() => {
-                    toast.action?.onPress();
-                    setToast(null);
-                  }}
-                  style={styles.toastActionButton}
-                >
-                  <Text style={styles.toastActionText}>{toast.action.label}</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          </View>
-        ) : null}
-
         <View
           style={[
             styles.composer,
@@ -382,7 +407,7 @@ export default function HomeScreen() {
         {error ===
         "OpenRouter API key for your account is missing. Add it now." ? (
           <Pressable
-            onPress={() => router.push("/settings-openrouter")}
+            onPress={() => router.push("/settings-ai")}
             style={styles.errorLink}
           >
             <AppText style={[styles.errorLinkText, { color: colors.primary }]}>
@@ -404,6 +429,7 @@ const styles = StyleSheet.create({
   },
   messagesContent: {
     paddingHorizontal: 16,
+    paddingTop: 16,
     paddingBottom: 12,
     gap: 8,
   },
@@ -426,54 +452,6 @@ const styles = StyleSheet.create({
   errorLinkText: {
     fontSize: 14,
     fontWeight: "700",
-  },
-  toast: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 86,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 6,
-    borderWidth: 0,
-    zIndex: 50,
-    alignItems: "center",
-    justifyContent: "center",
-    // Make the toast float above content.
-    shadowColor: "#000000",
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-    backgroundColor: "#323232",
-  },
-  toastInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "100%",
-  },
-  toastIcon: {
-    fontSize: 16,
-    fontWeight: "900",
-    marginRight: 8,
-  },
-  toastText: {
-    fontSize: 14,
-    fontWeight: "900",
-    letterSpacing: 0.1,
-    color: "#FFFFFF",
-    flex: 1,
-  },
-  toastActionButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  toastActionText: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#4FA3FF",
-    letterSpacing: 0.1,
   },
   composer: {
     margin: 12,

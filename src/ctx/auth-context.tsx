@@ -1,6 +1,10 @@
 import { createContext, useContext, useMemo, type PropsWithChildren } from 'react';
 
-import { useStorageState } from '@/hooks/use-storage-state';
+import {
+  setStorageItemAsync,
+  useStorageState,
+} from '@/hooks/use-storage-state';
+import { getUserProfileStorageKey } from '@/utils/user-profile-chat';
 
 type SignInPayload = {
   email: string;
@@ -14,6 +18,8 @@ type SignInResult =
 type SignUpPayload = {
   email: string;
   password: string;
+  firstName: string;
+  lastName: string;
 };
 
 type SignUpResult = { ok: true } | { ok: false; code: 'EMAIL_IN_USE' };
@@ -31,7 +37,7 @@ type ChangePasswordResult =
 
 type AuthContextValue = {
   signIn: (payload: SignInPayload) => SignInResult;
-  signUp: (payload: SignUpPayload) => SignUpResult;
+  signUp: (payload: SignUpPayload) => Promise<SignUpResult>;
   forgotPassword: (email: string) => ForgotPasswordResult;
   changePassword: (payload: ChangePasswordPayload) => ChangePasswordResult;
   signOut: () => void;
@@ -80,13 +86,42 @@ export function SessionProvider({ children }: PropsWithChildren) {
     return { ok: true, session: nextSession };
   };
 
-  const signUp = ({ email, password }: SignUpPayload): SignUpResult => {
+  const signUp = async ({
+    email,
+    password,
+    firstName,
+    lastName,
+  }: SignUpPayload): Promise<SignUpResult> => {
     const normalizedEmail = email.trim().toLowerCase();
     if (passwordByEmail[normalizedEmail]) {
       return { ok: false, code: 'EMAIL_IN_USE' };
     }
 
     savePasswords({ ...passwordByEmail, [normalizedEmail]: password });
+
+    const nextSession = `session-${normalizedEmail}`;
+
+    // Persist Profile so chat can personalize immediately.
+    // Saved via SecureStore (native) / localStorage (web).
+    try {
+      const profileStorageKey = getUserProfileStorageKey(
+        nextSession,
+      );
+      await setStorageItemAsync(
+        profileStorageKey,
+        JSON.stringify({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+        }),
+      );
+    } catch (error) {
+      // Profile is non-critical for auth; fail closed by logging and still
+      // completing account creation.
+      console.error('Failed to save user profile during sign up:', error);
+    }
+
+    // Auto-login after successful signup.
+    setSession(nextSession);
     return { ok: true };
   };
 

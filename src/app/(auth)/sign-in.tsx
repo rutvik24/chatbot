@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppButton, AppText, AppTextInput, AuthIllustration } from '@/components/common';
 import { useSession } from '@/ctx/auth-context';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
+import { showToast } from '@/utils/toast-bus';
 
 type FormState = {
   email: string;
@@ -75,6 +76,7 @@ export default function SignInScreen() {
     });
 
     if (result.ok) {
+      showToast('Signed in successfully');
       router.replace('/');
       return;
     }

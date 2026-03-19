@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, AppText } from '@/components/common';
@@ -11,11 +12,47 @@ function ErrorFallback({ error, onReset }: { error: unknown; onReset: () => void
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppText style={[styles.title, { color: colors.error }]}>Something went wrong</AppText>
-      <AppText style={styles.message} muted>
-        {message}
-      </AppText>
-      <AppButton label="Try again" onPress={onReset} style={{ marginTop: 16 }} />
+      <View style={styles.center}>
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              shadowColor: '#000',
+            },
+          ]}>
+          <View style={styles.iconRow}>
+            <SymbolView
+              name={{
+                ios: 'exclamationmark.triangle.fill',
+                android: 'error_outline',
+                web: 'warning',
+              }}
+              size={26}
+              tintColor={colors.error}
+            />
+          </View>
+
+          <AppText style={[styles.title, { color: colors.error }]}>
+            Something went wrong
+          </AppText>
+
+          <View style={[styles.messageBox, { borderColor: colors.border }]}>
+            <Text style={[styles.messageText, { color: colors.secondaryText }]}>
+              {message}
+            </Text>
+          </View>
+
+          <View style={styles.actions}>
+            <AppButton
+              label="Try again"
+              onPress={onReset}
+              style={{ marginTop: 8 }}
+            />
+          </View>
+        </View>
+      </View>
     </SafeAreaView>
   );
 }
@@ -52,8 +89,49 @@ export default class ErrorBoundary extends React.Component<{
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 16, paddingVertical: 24 },
-  title: { fontSize: 20, fontWeight: '800', marginBottom: 8 },
-  message: { fontSize: 13, fontWeight: '500', marginBottom: 0 },
+  container: { flex: 1 },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+  },
+  card: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 18,
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 10,
+  },
+  iconRow: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+    marginBottom: 10,
+    backgroundColor: 'rgba(0,0,0,0.02)',
+  },
+  title: { fontSize: 20, fontWeight: '900', marginBottom: 10 },
+  messageBox: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 14,
+  },
+  messageText: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  actions: {
+    alignItems: 'stretch',
+  },
 });
 

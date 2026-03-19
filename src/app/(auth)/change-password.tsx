@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -20,6 +21,7 @@ import {
 import { useSession } from '@/ctx/auth-context';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 import { isStrongPassword } from '@/utils/password-validation';
+import { showToast } from '@/utils/toast-bus';
 
 type FormState = {
   currentPassword: string;
@@ -77,7 +79,9 @@ export default function ChangePasswordScreen() {
     }
 
     setSuccess('Password changed successfully.');
+    showToast('Password changed successfully');
     setForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    router.back();
   };
 
   return (

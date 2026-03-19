@@ -22,6 +22,7 @@ import {
 import { useSession } from '@/ctx/auth-context';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 import { isStrongPassword } from '@/utils/password-validation';
+import { showToast } from '@/utils/toast-bus';
 
 type FormState = {
   firstName: string;
@@ -64,7 +65,7 @@ export default function SignUpScreen() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [successMessage, setSuccessMessage] = useState('');
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const nextErrors: FormErrors = {};
 
     if (!form.firstName.trim()) {
@@ -103,14 +104,21 @@ export default function SignUpScreen() {
       return;
     }
 
-    const result = signUp({ email: form.email, password: form.password });
+    const result = await signUp({
+      email: form.email,
+      password: form.password,
+      firstName: form.firstName,
+      lastName: form.lastName,
+    });
 
     if (!result.ok) {
       setErrors({ general: 'Email is already registered. Try signing in instead.' });
       return;
     }
 
-    setSuccessMessage('Account created. You can now sign in with these credentials.');
+    const firstName = form.firstName.trim();
+    setSuccessMessage('Account created successfully. Redirecting…');
+    showToast(firstName ? `Welcome, ${firstName}!` : 'Account created successfully');
     setForm({
       firstName: '',
       lastName: '',
@@ -119,6 +127,9 @@ export default function SignUpScreen() {
       confirmPassword: '',
       acceptedTerms: false,
     });
+
+    // `signUp()` already sets the session; navigate to chat.
+    router.replace('/');
   };
 
   return (
@@ -198,7 +209,9 @@ export default function SignUpScreen() {
             error={errors.confirmPassword}
             placeholder="Password123!"
             returnKeyType="done"
-            onSubmitEditing={handleSubmit}
+            onSubmitEditing={() => {
+              void handleSubmit();
+            }}
           />
 
           <Pressable

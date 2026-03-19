@@ -8,12 +8,39 @@ export type ChatMessage = {
   content: string;
 };
 
-const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+/** Default OpenAI-compatible endpoint (OpenRouter). */
+export const DEFAULT_OPENAI_COMPAT_BASE_URL = 'https://openrouter.ai/api/v1';
 const OPENROUTER_FREE_MODEL = 'openrouter/free';
 
 let didPatchFetch = false;
 
-function getOpenRouterClient(apiKey: string) {
+/** Normalize user input into a base URL suitable for the OpenAI SDK (no trailing slash). */
+export function normalizeOpenAiCompatibleBaseUrl(input: string): string {
+  let s = input.trim().replace(/\/+$/, '');
+  if (!s) {
+    throw new Error('Base URL is empty.');
+  }
+  if (!/^https?:\/\//i.test(s)) {
+    s = `https://${s}`;
+  }
+  const u = new URL(s);
+  const path = u.pathname.replace(/\/+$/, '');
+  return `${u.origin}${path}`;
+}
+
+export function resolveOpenAiCompatibleBaseUrl(
+  stored: string | null | undefined
+): string {
+  const raw = stored?.trim();
+  if (!raw) return DEFAULT_OPENAI_COMPAT_BASE_URL;
+  try {
+    return normalizeOpenAiCompatibleBaseUrl(raw);
+  } catch {
+    return DEFAULT_OPENAI_COMPAT_BASE_URL;
+  }
+}
+
+function getOpenAiClient(apiKey: string, baseURL: string) {
   // Ensure the OpenAI SDK uses Expo's streaming-capable `fetch`.
   if (!didPatchFetch) {
     didPatchFetch = true;
@@ -22,13 +49,15 @@ function getOpenRouterClient(apiKey: string) {
 
   return new OpenAI({
     apiKey,
-    baseURL: OPENROUTER_BASE_URL,
+    baseURL,
     dangerouslyAllowBrowser: true,
   });
 }
 
 export type StreamChatCompletionInput = {
   apiKey: string;
+  /** Stored value; empty/null uses {@link DEFAULT_OPENAI_COMPAT_BASE_URL}. */
+  baseURL?: string | null;
   messages: ChatMessage[];
   model?: string;
   signal?: AbortSignal;
@@ -36,11 +65,13 @@ export type StreamChatCompletionInput = {
 
 export async function* streamChatCompletion({
   apiKey,
+  baseURL: baseUrlStored,
   messages,
   model = OPENROUTER_FREE_MODEL,
   signal,
 }: StreamChatCompletionInput): AsyncGenerator<string, void, void> {
-  const client = getOpenRouterClient(apiKey);
+  const baseURL = resolveOpenAiCompatibleBaseUrl(baseUrlStored);
+  const client = getOpenAiClient(apiKey, baseURL);
 
   const stream = await client.chat.completions.create(
     {

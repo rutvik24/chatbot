@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -14,43 +14,31 @@ import { AppButton, AppText, AppTextInput } from '@/components/common';
 import { useSession } from '@/ctx/auth-context';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 import { useStorageState } from '@/hooks/use-storage-state';
+import {
+  getUserProfileStorageKey,
+  parseUserProfileFromStorage,
+  type UserProfileFields,
+} from '@/utils/user-profile-chat';
 
-type Profile = {
-  firstName: string;
-  lastName: string;
-};
-
-function getProfileFromStorage(value: string | null): Profile {
-  if (!value) {
-    return { firstName: '', lastName: '' };
-  }
-
-  try {
-    const parsed = JSON.parse(value) as Partial<Profile>;
-    return {
-      firstName: parsed.firstName ?? '',
-      lastName: parsed.lastName ?? '',
-    };
-  } catch {
-    return { firstName: '', lastName: '' };
-  }
-}
+type Profile = UserProfileFields;
 
 export default function SettingsProfileScreen() {
   useColorScheme();
   const colors = useNativeThemeColors();
   const { session } = useSession();
   const email = useMemo(() => (session ? session.replace('session-', '') : ''), [session]);
-  const safeEmailKeyPart = useMemo(
-    () => (email || 'anonymous').replace(/[^a-zA-Z0-9._-]/g, '_'),
-    [email]
-  );
-  const profileStorageKey = useMemo(() => `profile_${safeEmailKeyPart}`, [safeEmailKeyPart]);
+  const profileStorageKey = useMemo(() => getUserProfileStorageKey(session), [session]);
 
   const [[, profileValue], setProfileValue] = useStorageState(profileStorageKey);
-  const [profile, setProfile] = useState<Profile>(() => getProfileFromStorage(profileValue));
+  const [profile, setProfile] = useState<Profile>(() =>
+    parseUserProfileFromStorage(profileValue),
+  );
   const [message, setMessage] = useState('');
   const lastNameRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    setProfile(parseUserProfileFromStorage(profileValue));
+  }, [profileValue]);
 
   const saveProfile = () => {
     setProfileValue(JSON.stringify(profile));

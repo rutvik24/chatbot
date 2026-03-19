@@ -9,6 +9,8 @@ export type Toast = {
   durationMs?: number;
 };
 
+export const DEFAULT_TOAST_DURATION_MS = 3000;
+
 type ToastListener = (toast: Toast) => void;
 
 let listeners: ToastListener[] = [];
@@ -20,11 +22,14 @@ export function subscribeToast(listener: ToastListener): () => void {
   };
 }
 
-export function showToast(toastOrMessage: string | Toast) {
+export function showToast(toastOrMessage: string | Toast, durationMs?: number) {
   const toast: Toast =
     typeof toastOrMessage === 'string'
-      ? { message: toastOrMessage }
-      : toastOrMessage;
+      ? { message: toastOrMessage, durationMs }
+      : {
+          ...toastOrMessage,
+          ...(typeof durationMs === 'number' ? { durationMs } : {}),
+        };
 
   for (const listener of listeners) {
     listener(toast);
