@@ -73,6 +73,8 @@ export default function HomeScreen() {
   const [isMigratingKey, setIsMigratingKey] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const shouldAutoScrollRef = useRef(true);
+  const isAtBottomRef = useRef(true);
   const listRef =
     useRef<
       FlatList<{ id: string; role: ChatMessage["role"]; content: string }>
@@ -96,8 +98,19 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!listRef.current) return;
+    if (!shouldAutoScrollRef.current) return;
     listRef.current.scrollToEnd({ animated: true });
-  }, [messages.length, isGenerating]);
+  }, [messages.length]);
+
+  const handleScroll = (event: any) => {
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+
+    const distanceFromBottom =
+      contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    const atBottom = distanceFromBottom <= 24;
+    isAtBottomRef.current = atBottom;
+    shouldAutoScrollRef.current = atBottom;
+  };
 
   useEffect(() => {
     if (effectiveOpenRouterKey.trim()) {
@@ -204,7 +217,8 @@ export default function HomeScreen() {
         m.id === assistantId ? { ...m, content: m.content + tokenBuffer } : m,
       ),
     );
-    // Keep the newest streamed tokens in view.
+    // Only auto-scroll when user is already at the bottom.
+    if (!shouldAutoScrollRef.current) return;
     requestAnimationFrame(() => {
       listRef.current?.scrollToEnd({ animated: true });
     });
@@ -220,11 +234,13 @@ export default function HomeScreen() {
       return;
     }
 
+    // Reset to default behavior: when user sends a new message, we should
+    // auto-scroll back to the end and keep streaming in view.
+    shouldAutoScrollRef.current = true;
+    isAtBottomRef.current = true;
+
     // Wait for key storage unless an env default is available.
-    if (
-      isKeyLoading &&
-      !resolveOpenRouterApiKey(storedOpenRouterKey).trim()
-    ) {
+    if (isKeyLoading && !resolveOpenRouterApiKey(storedOpenRouterKey).trim()) {
       return;
     }
 
@@ -267,8 +283,7 @@ export default function HomeScreen() {
           profileJsonForChat = localStorage.getItem(profileStorageKey);
         }
       } else {
-        profileJsonForChat =
-          await SecureStore.getItemAsync(profileStorageKey);
+        profileJsonForChat = await SecureStore.getItemAsync(profileStorageKey);
       }
       if (profileJsonForChat !== storedProfileJson) {
         setProfileJson(profileJsonForChat);
@@ -342,6 +357,12 @@ export default function HomeScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messagesContent}
           keyboardShouldPersistTaps="handled"
+          onScroll={handleScroll}
+          scrollEventThrottle={50}
+          onScrollBeginDrag={() => {
+            // User started interacting; stop forcing scroll until they return to bottom.
+            shouldAutoScrollRef.current = false;
+          }}
           renderItem={({ item }) => (
             <View
               style={[
@@ -373,11 +394,18 @@ export default function HomeScreen() {
           ]}
         >
           <TextInput
-            style={[styles.input, { color: colors.text }]}
             placeholder="Type a message..."
             placeholderTextColor={colors.placeholder as string}
             value={text}
             onChangeText={setText}
+            multiline
+            textAlignVertical="top"
+            style={[
+              styles.input,
+              {
+                color: colors.text,
+              },
+            ]}
             onSubmitEditing={handleSend}
             returnKeyType="send"
           />
@@ -457,7 +485,7 @@ const styles = StyleSheet.create({
     margin: 12,
     borderWidth: 1,
     borderRadius: 14,
-    minHeight: 52,
+    minHeight: 48,
     paddingLeft: 12,
     paddingRight: 6,
     flexDirection: "row",
@@ -468,6 +496,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     paddingVertical: 8,
+    maxHeight: 48,
   },
   sendButton: {
     width: 36,

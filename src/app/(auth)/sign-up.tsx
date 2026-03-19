@@ -19,6 +19,7 @@ import {
   PasswordChecklist,
   AuthIllustration,
 } from '@/components/common';
+import { SymbolView } from 'expo-symbols';
 import { useSession } from '@/ctx/auth-context';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 import { isStrongPassword } from '@/utils/password-validation';
@@ -227,7 +228,15 @@ export default function SignUpScreen() {
                   backgroundColor: form.acceptedTerms ? colors.primary : 'transparent',
                 },
               ]}
-            />
+            >
+              {form.acceptedTerms ? (
+                <SymbolView
+                  name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                  size={14}
+                  tintColor="#FFFFFF"
+                />
+              ) : null}
+            </View>
             <AppText style={styles.termsText}>
               I accept the Terms & Conditions and Privacy Policy
             </AppText>
@@ -302,6 +311,8 @@ const styles = StyleSheet.create({
     height: 18,
     borderWidth: 1,
     borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   termsText: {
     flex: 1,
