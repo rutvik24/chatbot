@@ -75,6 +75,8 @@ export default function HomeScreen() {
   const abortRef = useRef<AbortController | null>(null);
   const shouldAutoScrollRef = useRef(true);
   const isAtBottomRef = useRef(true);
+  const composerInputRef = useRef<TextInput>(null);
+  const generationRunIdRef = useRef(0);
   const listRef =
     useRef<
       FlatList<{ id: string; role: ChatMessage["role"]; content: string }>
@@ -251,6 +253,8 @@ export default function HomeScreen() {
 
     setError(null);
 
+    const runId = ++generationRunIdRef.current;
+
     // Cancel any in-flight request.
     abortRef.current?.abort();
     const abortController = new AbortController();
@@ -305,10 +309,10 @@ export default function HomeScreen() {
       ? [personalization, ...recentTurns]
       : recentTurns;
 
-    try {
-      let lastFlush = Date.now();
-      let buffer = "";
+    let lastFlush = Date.now();
+    let buffer = "";
 
+    try {
       for await (const token of streamChatCompletion({
         apiKey: effectiveOpenRouterKey,
         baseURL: storedOpenAiBaseUrl,
@@ -329,6 +333,30 @@ export default function HomeScreen() {
       buffer = "";
     } catch (e) {
       const friendly = getFriendlyChatProviderError(e);
+
+      // When the user presses "Stop", we abort the request. In that case,
+      // avoid injecting a cancellation error message into the assistant.
+      const isCancelled = friendly === "The request was cancelled.";
+      const isActiveRun = generationRunIdRef.current === runId;
+      if (isCancelled) {
+        if (!isActiveRun) return;
+
+        // "Stop" should undo the send so the user can quickly edit their last message.
+        // Remove both the in-flight assistant message and the user message that triggered it,
+        // then restore the user's text into the composer.
+        setMessages((previous) =>
+          previous.filter(
+            (m) => m.id !== assistantMessageId && m.id !== userMessageId,
+          ),
+        );
+        setText(value);
+        setError(null);
+        requestAnimationFrame(() => {
+          composerInputRef.current?.focus();
+        });
+        return;
+      }
+
       setMessages((previous) =>
         previous.map((m) =>
           m.id === assistantMessageId
@@ -336,10 +364,18 @@ export default function HomeScreen() {
             : m,
         ),
       );
-      setError(friendly);
+      if (isActiveRun) setError(friendly);
     } finally {
-      setIsGenerating(false);
+      if (generationRunIdRef.current === runId) setIsGenerating(false);
     }
+  };
+
+  const handleStop = () => {
+    // Stop streaming / generation immediately.
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setError(null);
+    setIsGenerating(false);
   };
 
   return (
@@ -394,6 +430,7 @@ export default function HomeScreen() {
           ]}
         >
           <TextInput
+            ref={composerInputRef}
             placeholder="Type a message..."
             placeholderTextColor={colors.placeholder as string}
             value={text}
@@ -406,21 +443,32 @@ export default function HomeScreen() {
                 color: colors.text,
               },
             ]}
-            onSubmitEditing={handleSend}
+            onSubmitEditing={() => {
+              if (isGenerating) return;
+              void handleSend();
+            }}
             returnKeyType="send"
           />
           <Pressable
-            onPress={handleSend}
-            disabled={!canSend}
+            onPress={isGenerating ? handleStop : handleSend}
+            disabled={!isGenerating && !canSend}
             style={[
               styles.sendButton,
               {
-                backgroundColor: canSend ? colors.primary : colors.border,
+                backgroundColor: isGenerating
+                  ? colors.error
+                  : canSend
+                    ? colors.primary
+                    : colors.border,
               },
             ]}
           >
             <SymbolView
-              name={{ ios: "paperplane.fill", android: "send", web: "send" }}
+              name={
+                isGenerating
+                  ? { ios: "stop.fill", android: "stop", web: "stop" }
+                  : { ios: "paperplane.fill", android: "send", web: "send" }
+              }
               size={16}
               tintColor="#FFFFFF"
             />
