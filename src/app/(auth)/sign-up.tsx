@@ -117,90 +117,90 @@ export default function SignUpScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <AppText style={styles.title}>Create account</AppText>
-        <AppText muted>Sign up with a new email to test registration flow.</AppText>
-        <AuthIllustration variant="signUp" />
+          <AppText style={styles.title}>Create account</AppText>
+          <AppText muted>Sign up with a new email to test registration flow.</AppText>
+          <AuthIllustration variant="signUp" />
 
-        <View style={styles.nameRow}>
-          <View style={styles.nameInput}>
-            <AppTextInput
-              label="First name"
-              value={form.firstName}
-              onChangeText={(firstName: string) => setForm((previous) => ({ ...previous, firstName }))}
-              error={errors.firstName}
-              placeholder="John"
-            />
+          <View style={styles.nameRow}>
+            <View style={styles.nameInput}>
+              <AppTextInput
+                label="First name"
+                value={form.firstName}
+                onChangeText={(firstName: string) => setForm((previous) => ({ ...previous, firstName }))}
+                error={errors.firstName}
+                placeholder="John"
+              />
+            </View>
+            <View style={styles.nameInput}>
+              <AppTextInput
+                label="Last name"
+                value={form.lastName}
+                onChangeText={(lastName: string) => setForm((previous) => ({ ...previous, lastName }))}
+                error={errors.lastName}
+                placeholder="Doe"
+              />
+            </View>
           </View>
-          <View style={styles.nameInput}>
-            <AppTextInput
-              label="Last name"
-              value={form.lastName}
-              onChangeText={(lastName: string) => setForm((previous) => ({ ...previous, lastName }))}
-              error={errors.lastName}
-              placeholder="Doe"
-            />
-          </View>
-        </View>
 
-        <AppTextInput
-          label="Email"
-          value={form.email}
-          onChangeText={(email: string) => setForm((previous) => ({ ...previous, email }))}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          error={errors.email}
-          placeholder="new-user@expo.dev"
-        />
-        <AppTextInput
-          label="Password"
-          value={form.password}
-          onChangeText={(password: string) => setForm((previous) => ({ ...previous, password }))}
-          isPasswordField
-          error={errors.password}
-          placeholder="Password123!"
-        />
-        <PasswordChecklist password={form.password} />
-        <AppTextInput
-          label="Confirm password"
-          value={form.confirmPassword}
-          onChangeText={(confirmPassword: string) =>
-            setForm((previous) => ({ ...previous, confirmPassword }))
-          }
-          isPasswordField
-          error={errors.confirmPassword}
-          placeholder="Password123!"
-        />
-
-        <Pressable
-          style={styles.termsRow}
-          onPress={() =>
-            setForm((previous) => ({ ...previous, acceptedTerms: !previous.acceptedTerms }))
-          }>
-          <View
-            style={[
-              styles.checkbox,
-              {
-                borderColor: form.acceptedTerms ? colors.primary : colors.border,
-                backgroundColor: form.acceptedTerms ? colors.primary : 'transparent',
-              },
-            ]}
+          <AppTextInput
+            label="Email"
+            value={form.email}
+            onChangeText={(email: string) => setForm((previous) => ({ ...previous, email }))}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            error={errors.email}
+            placeholder="new-user@expo.dev"
           />
-          <AppText style={styles.termsText}>
-            I accept the Terms & Conditions and Privacy Policy
-          </AppText>
-        </Pressable>
-        {errors.acceptedTerms ? (
-          <AppText style={[styles.message, { color: colors.error }]}>{errors.acceptedTerms}</AppText>
-        ) : null}
+          <AppTextInput
+            label="Password"
+            value={form.password}
+            onChangeText={(password: string) => setForm((previous) => ({ ...previous, password }))}
+            isPasswordField
+            error={errors.password}
+            placeholder="Password123!"
+          />
+          <PasswordChecklist password={form.password} />
+          <AppTextInput
+            label="Confirm password"
+            value={form.confirmPassword}
+            onChangeText={(confirmPassword: string) =>
+              setForm((previous) => ({ ...previous, confirmPassword }))
+            }
+            isPasswordField
+            error={errors.confirmPassword}
+            placeholder="Password123!"
+          />
 
-        {errors.general ? <AppText style={[styles.message, { color: colors.error }]}>{errors.general}</AppText> : null}
-        {successMessage ? <AppText style={[styles.message, { color: colors.primary }]}>{successMessage}</AppText> : null}
+          <Pressable
+            style={styles.termsRow}
+            onPress={() =>
+              setForm((previous) => ({ ...previous, acceptedTerms: !previous.acceptedTerms }))
+            }>
+            <View
+              style={[
+                styles.checkbox,
+                {
+                  borderColor: form.acceptedTerms ? colors.primary : colors.border,
+                  backgroundColor: form.acceptedTerms ? colors.primary : 'transparent',
+                },
+              ]}
+            />
+            <AppText style={styles.termsText}>
+              I accept the Terms & Conditions and Privacy Policy
+            </AppText>
+          </Pressable>
+          {errors.acceptedTerms ? (
+            <AppText style={[styles.message, { color: colors.error }]}>{errors.acceptedTerms}</AppText>
+          ) : null}
 
-        <AppButton label="Sign Up" onPress={handleSubmit} />
+          {errors.general ? <AppText style={[styles.message, { color: colors.error }]}>{errors.general}</AppText> : null}
+          {successMessage ? <AppText style={[styles.message, { color: colors.primary }]}>{successMessage}</AppText> : null}
 
-        <Pressable onPress={() => router.push('/sign-in')}>
-          <AppText style={styles.linkText}>Back to sign in</AppText>
-        </Pressable>
+          <AppButton label="Sign Up" onPress={handleSubmit} />
+
+          <Pressable onPress={() => router.push('/sign-in')}>
+            <AppText style={styles.linkText}>Back to sign in</AppText>
+          </Pressable>
         </View>
       </ScrollView>
     </SafeAreaView>

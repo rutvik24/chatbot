@@ -106,62 +106,62 @@ export default function SignInScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <AppText style={styles.title}>Sign in</AppText>
-        <AppText muted style={styles.subtitle}>
-          Use the static test credentials or test the failure scenarios quickly.
-        </AppText>
-        <AuthIllustration variant="signIn" />
-
-        <AppTextInput
-          label="Email"
-          value={form.email}
-          onChangeText={(email: string) => setForm((previous) => ({ ...previous, email }))}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-          error={errors.email}
-          placeholder="test@expo.dev"
-        />
-
-        <AppTextInput
-          label="Password"
-          value={form.password}
-          onChangeText={(password: string) => setForm((previous) => ({ ...previous, password }))}
-          isPasswordField
-          error={errors.password}
-          placeholder="Password123!"
-        />
-
-        {errors.general ? <AppText style={[styles.generalError, { color: colors.error }]}>{errors.general}</AppText> : null}
-
-        <AppButton label="Sign In" onPress={handleSubmit} disabled={!canSubmit} />
-
-        <View style={styles.linksRow}>
-          <Pressable onPress={() => router.push('/sign-up')}>
-            <AppText style={styles.linkText}>Create account</AppText>
-          </Pressable>
-          <Pressable onPress={() => router.push('/forgot-password')}>
-            <AppText style={styles.linkText}>Forgot password</AppText>
-          </Pressable>
-        </View>
-
-        <View style={styles.testCases}>
-          <AppText muted style={styles.testTitle}>
-            Quick test cases
+          <AppText style={styles.title}>Sign in</AppText>
+          <AppText muted style={styles.subtitle}>
+            Use the static test credentials or test the failure scenarios quickly.
           </AppText>
-          <Pressable onPress={fillValidCase}>
-            <AppText style={styles.testCaseText}>Pass: Valid user + password</AppText>
-          </Pressable>
-          <Pressable onPress={fillWrongPasswordCase}>
-            <AppText style={styles.testCaseText}>Error: Wrong password</AppText>
-          </Pressable>
-          <Pressable onPress={fillUnknownUserCase}>
-            <AppText style={styles.testCaseText}>Error: Unknown user</AppText>
-          </Pressable>
-          <Pressable onPress={fillLockedUserCase}>
-            <AppText style={styles.testCaseText}>Error: Locked account</AppText>
-          </Pressable>
-        </View>
+          <AuthIllustration variant="signIn" />
+
+          <AppTextInput
+            label="Email"
+            value={form.email}
+            onChangeText={(email: string) => setForm((previous) => ({ ...previous, email }))}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            error={errors.email}
+            placeholder="test@expo.dev"
+          />
+
+          <AppTextInput
+            label="Password"
+            value={form.password}
+            onChangeText={(password: string) => setForm((previous) => ({ ...previous, password }))}
+            isPasswordField
+            error={errors.password}
+            placeholder="Password123!"
+          />
+
+          {errors.general ? <AppText style={[styles.generalError, { color: colors.error }]}>{errors.general}</AppText> : null}
+
+          <AppButton label="Sign In" onPress={handleSubmit} disabled={!canSubmit} />
+
+          <View style={styles.linksRow}>
+            <Pressable onPress={() => router.push('/sign-up')}>
+              <AppText style={styles.linkText}>Create account</AppText>
+            </Pressable>
+            <Pressable onPress={() => router.push('/forgot-password')}>
+              <AppText style={styles.linkText}>Forgot password</AppText>
+            </Pressable>
+          </View>
+
+          <View style={styles.testCases}>
+            <AppText muted style={styles.testTitle}>
+              Quick test cases
+            </AppText>
+            <Pressable onPress={fillValidCase}>
+              <AppText style={styles.testCaseText}>Pass: Valid user + password</AppText>
+            </Pressable>
+            <Pressable onPress={fillWrongPasswordCase}>
+              <AppText style={styles.testCaseText}>Error: Wrong password</AppText>
+            </Pressable>
+            <Pressable onPress={fillUnknownUserCase}>
+              <AppText style={styles.testCaseText}>Error: Unknown user</AppText>
+            </Pressable>
+            <Pressable onPress={fillLockedUserCase}>
+              <AppText style={styles.testCaseText}>Error: Locked account</AppText>
+            </Pressable>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>

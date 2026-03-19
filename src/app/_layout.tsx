@@ -96,15 +96,15 @@ function RootNavigator() {
         <Stack.Protected guard={!!session}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen
-            name="change-password"
+            name="(auth)/change-password"
             options={{ headerShown: true }}
           />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
-          <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-          <Stack.Screen name="sign-up" options={{ headerShown: true }} />
+          <Stack.Screen name="(auth)/sign-in" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)/sign-up" options={{ headerShown: true }} />
           <Stack.Screen
-            name="forgot-password"
+            name="(auth)/forgot-password"
             options={{ headerShown: true }}
           />
         </Stack.Protected>

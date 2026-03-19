@@ -50,27 +50,27 @@ export default function ForgotPasswordScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <AppText style={styles.title}>Forgot password</AppText>
-        <AppText muted>Enter your email to request a password reset.</AppText>
-        <AuthIllustration variant="forgotPassword" />
+          <AppText style={styles.title}>Forgot password</AppText>
+          <AppText muted>Enter your email to request a password reset.</AppText>
+          <AuthIllustration variant="forgotPassword" />
 
-        <AppTextInput
-          label="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          placeholder="test@expo.dev"
-          error={error}
-        />
+          <AppTextInput
+            label="Email"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            placeholder="test@expo.dev"
+            error={error}
+          />
 
-        {success ? <AppText style={[styles.message, { color: colors.primary }]}>{success}</AppText> : null}
+          {success ? <AppText style={[styles.message, { color: colors.primary }]}>{success}</AppText> : null}
 
-        <AppButton label="Send reset link" onPress={handleSubmit} />
+          <AppButton label="Send reset link" onPress={handleSubmit} />
 
-        <Pressable onPress={() => router.push('/sign-in')}>
-          <AppText style={styles.linkText}>Back to sign in</AppText>
-        </Pressable>
+          <Pressable onPress={() => router.push('/sign-in')}>
+            <AppText style={styles.linkText}>Back to sign in</AppText>
+          </Pressable>
         </View>
       </ScrollView>
     </SafeAreaView>
