@@ -12,20 +12,21 @@ export default function AppTabs() {
     <NativeTabs
       backgroundColor={colors.background}
       indicatorColor={colors.primary}
-      labelStyle={{ selected: { color: colors.text } }}>
+      iconColor={{ default: colors.secondaryText, selected: colors.text }}
+      labelStyle={{ default: { color: colors.secondaryText }, selected: { color: colors.text } }}>
       <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Chat</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/home.png')}
-          renderingMode="template"
+          sf={{ default: 'message', selected: 'message.fill' }}
+          drawable="ic_dialog_email"
         />
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="explore">
-        <NativeTabs.Trigger.Label>Explore</NativeTabs.Trigger.Label>
+      <NativeTabs.Trigger name="settings">
+        <NativeTabs.Trigger.Label>Settings</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
+          sf={{ default: 'slider.horizontal.3', selected: 'slider.horizontal.3' }}
+          drawable="ic_menu_preferences"
         />
       </NativeTabs.Trigger>
     </NativeTabs>

@@ -99,6 +99,18 @@ function RootNavigator() {
             name="(auth)/change-password"
             options={{ headerShown: true }}
           />
+          <Stack.Screen
+            name="(auth)/settings-profile"
+            options={{ headerShown: true }}
+          />
+          <Stack.Screen
+            name="(auth)/settings-security"
+            options={{ headerShown: true }}
+          />
+          <Stack.Screen
+            name="(auth)/settings-openrouter"
+            options={{ headerShown: true }}
+          />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="(auth)/sign-in" options={{ headerShown: false }} />

@@ -1,5 +1,5 @@
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
+import { forwardRef, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 
 import AppText from '@/components/common/app-text';
@@ -11,14 +11,10 @@ export type AppTextInputProps = TextInputProps & {
   isPasswordField?: boolean;
 };
 
-export default function AppTextInput({
-  label,
-  error,
-  isPasswordField = false,
-  secureTextEntry,
-  style,
-  ...props
-}: AppTextInputProps) {
+const AppTextInput = forwardRef<TextInput, AppTextInputProps>(function AppTextInput(
+  { label, error, isPasswordField = false, secureTextEntry, style, ...props },
+  ref
+) {
   const colors = useNativeThemeColors();
   const [isVisible, setIsVisible] = useState(false);
   const isSecure = isPasswordField ? !isVisible : secureTextEntry;
@@ -28,6 +24,7 @@ export default function AppTextInput({
       {label ? <AppText style={styles.label}>{label}</AppText> : null}
       <View style={[styles.inputContainer, { borderColor: error ? colors.error : colors.border }]}>
         <TextInput
+          ref={ref}
           {...props}
           secureTextEntry={isSecure}
           style={[styles.input, { color: colors.text }, style]}
@@ -50,7 +47,9 @@ export default function AppTextInput({
       {error ? <AppText style={[styles.error, { color: colors.error }]}>{error}</AppText> : null}
     </View>
   );
-}
+});
+
+export default AppTextInput;
 
 const styles = StyleSheet.create({
   wrapper: {

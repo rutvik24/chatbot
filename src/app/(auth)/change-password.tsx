@@ -1,5 +1,13 @@
-import { useState } from 'react';
-import { ScrollView, StyleSheet, View, useColorScheme } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+  useColorScheme,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -23,6 +31,8 @@ export default function ChangePasswordScreen() {
   useColorScheme();
   const colors = useNativeThemeColors();
   const { changePassword } = useSession();
+  const newPasswordRef = useRef<TextInput>(null);
+  const confirmPasswordRef = useRef<TextInput>(null);
   const [form, setForm] = useState<FormState>({
     currentPassword: '',
     newPassword: '',
@@ -72,7 +82,11 @@ export default function ChangePasswordScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <AppText style={styles.title}>Change password</AppText>
           <AppText muted>This screen is protected and only visible when you are logged in.</AppText>
@@ -85,23 +99,33 @@ export default function ChangePasswordScreen() {
               setForm((previous) => ({ ...previous, currentPassword }))
             }
             isPasswordField
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => newPasswordRef.current?.focus()}
           />
           <AppTextInput
+            ref={newPasswordRef}
             label="New password"
             value={form.newPassword}
             onChangeText={(newPassword: string) =>
               setForm((previous) => ({ ...previous, newPassword }))
             }
             isPasswordField
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => confirmPasswordRef.current?.focus()}
           />
           <PasswordChecklist password={form.newPassword} />
           <AppTextInput
+            ref={confirmPasswordRef}
             label="Confirm new password"
             value={form.confirmPassword}
             onChangeText={(confirmPassword: string) =>
               setForm((previous) => ({ ...previous, confirmPassword }))
             }
             isPasswordField
+            returnKeyType="done"
+            onSubmitEditing={handleSubmit}
           />
 
           {error ? <AppText style={[styles.message, { color: colors.error }]}>{error}</AppText> : null}
@@ -110,12 +134,16 @@ export default function ChangePasswordScreen() {
           <AppButton label="Update password" onPress={handleSubmit} />
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  keyboardAvoid: {
     flex: 1,
   },
   scrollContent: {

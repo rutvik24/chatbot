@@ -9,16 +9,16 @@ type SignInPayload = {
 
 type SignInResult =
   | { ok: true; session: string }
-  | { ok: false; code: 'INVALID_CREDENTIALS' | 'USER_NOT_FOUND' | 'USER_LOCKED' };
+  | { ok: false; code: 'INVALID_CREDENTIALS' | 'USER_NOT_FOUND' };
 
 type SignUpPayload = {
   email: string;
   password: string;
 };
 
-type SignUpResult = { ok: true } | { ok: false; code: 'EMAIL_IN_USE' | 'ACCOUNT_LOCKED' };
+type SignUpResult = { ok: true } | { ok: false; code: 'EMAIL_IN_USE' };
 
-type ForgotPasswordResult = { ok: true } | { ok: false; code: 'USER_NOT_FOUND' | 'ACCOUNT_LOCKED' };
+type ForgotPasswordResult = { ok: true } | { ok: false; code: 'USER_NOT_FOUND' };
 
 type ChangePasswordPayload = {
   currentPassword: string;
@@ -39,15 +39,7 @@ type AuthContextValue = {
   isLoading: boolean;
 };
 
-const TEST_USERS = {
-  valid: { email: 'test@expo.dev', password: 'Password123!', locked: false },
-  locked: { email: 'locked@expo.dev', password: 'Password123!', locked: true },
-} as const;
-
-const DEFAULT_PASSWORDS: Record<string, string> = {
-  [TEST_USERS.valid.email]: TEST_USERS.valid.password,
-  [TEST_USERS.locked.email]: TEST_USERS.locked.password,
-};
+const DEFAULT_PASSWORDS: Record<string, string> = {};
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -78,11 +70,6 @@ export function SessionProvider({ children }: PropsWithChildren) {
       return { ok: false, code: 'USER_NOT_FOUND' };
     }
 
-    const user = Object.values(TEST_USERS).find((item) => item.email === normalizedEmail);
-    if (user?.locked) {
-      return { ok: false, code: 'USER_LOCKED' };
-    }
-
     const expectedPassword = passwordByEmail[normalizedEmail];
     if (!expectedPassword || expectedPassword !== password) {
       return { ok: false, code: 'INVALID_CREDENTIALS' };
@@ -95,12 +82,6 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   const signUp = ({ email, password }: SignUpPayload): SignUpResult => {
     const normalizedEmail = email.trim().toLowerCase();
-    const user = Object.values(TEST_USERS).find((item) => item.email === normalizedEmail);
-
-    if (user?.locked) {
-      return { ok: false, code: 'ACCOUNT_LOCKED' };
-    }
-
     if (passwordByEmail[normalizedEmail]) {
       return { ok: false, code: 'EMAIL_IN_USE' };
     }
@@ -111,12 +92,6 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   const forgotPassword = (email: string): ForgotPasswordResult => {
     const normalizedEmail = email.trim().toLowerCase();
-    const user = Object.values(TEST_USERS).find((item) => item.email === normalizedEmail);
-
-    if (user?.locked) {
-      return { ok: false, code: 'ACCOUNT_LOCKED' };
-    }
-
     if (!passwordByEmail[normalizedEmail]) {
       return { ok: false, code: 'USER_NOT_FOUND' };
     }
@@ -177,4 +152,3 @@ export function useSession() {
   return value;
 }
 
-export const AuthTestUsers = TEST_USERS;

@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View, useColorScheme } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, AppText, AppTextInput, AuthIllustration } from '@/components/common';
@@ -35,11 +35,7 @@ export default function ForgotPasswordScreen() {
     const result = forgotPassword(normalized);
 
     if (!result.ok) {
-      if (result.code === 'USER_NOT_FOUND') {
-        setError('No account found for this email.');
-      } else {
-        setError('This account is locked. Password reset is disabled.');
-      }
+      setError('No account found for this email.');
       return;
     }
 
@@ -48,7 +44,11 @@ export default function ForgotPasswordScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <AppText style={styles.title}>Forgot password</AppText>
           <AppText muted>Enter your email to request a password reset.</AppText>
@@ -60,8 +60,10 @@ export default function ForgotPasswordScreen() {
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
-            placeholder="test@expo.dev"
+            placeholder="your-email@example.com"
             error={error}
+            returnKeyType="done"
+            onSubmitEditing={handleSubmit}
           />
 
           {success ? <AppText style={[styles.message, { color: colors.primary }]}>{success}</AppText> : null}
@@ -73,12 +75,16 @@ export default function ForgotPasswordScreen() {
           </Pressable>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  keyboardAvoid: {
     flex: 1,
   },
   scrollContent: {

@@ -1,6 +1,15 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View, useColorScheme } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+  useColorScheme,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
@@ -39,6 +48,10 @@ export default function SignUpScreen() {
   useColorScheme();
   const colors = useNativeThemeColors();
   const { signUp } = useSession();
+  const lastNameRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmPasswordRef = useRef<TextInput>(null);
 
   const [form, setForm] = useState<FormState>({
     firstName: '',
@@ -93,12 +106,7 @@ export default function SignUpScreen() {
     const result = signUp({ email: form.email, password: form.password });
 
     if (!result.ok) {
-      if (result.code === 'EMAIL_IN_USE') {
-        setErrors({ general: 'Email is already registered. Try signing in instead.' });
-        return;
-      }
-
-      setErrors({ general: 'This account is locked and cannot sign up again.' });
+      setErrors({ general: 'Email is already registered. Try signing in instead.' });
       return;
     }
 
@@ -115,7 +123,11 @@ export default function SignUpScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <AppText style={styles.title}>Create account</AppText>
           <AppText muted>Sign up with a new email to test registration flow.</AppText>
@@ -129,20 +141,28 @@ export default function SignUpScreen() {
                 onChangeText={(firstName: string) => setForm((previous) => ({ ...previous, firstName }))}
                 error={errors.firstName}
                 placeholder="John"
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => lastNameRef.current?.focus()}
               />
             </View>
             <View style={styles.nameInput}>
               <AppTextInput
+                ref={lastNameRef}
                 label="Last name"
                 value={form.lastName}
                 onChangeText={(lastName: string) => setForm((previous) => ({ ...previous, lastName }))}
                 error={errors.lastName}
                 placeholder="Doe"
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => emailRef.current?.focus()}
               />
             </View>
           </View>
 
           <AppTextInput
+            ref={emailRef}
             label="Email"
             value={form.email}
             onChangeText={(email: string) => setForm((previous) => ({ ...previous, email }))}
@@ -150,17 +170,25 @@ export default function SignUpScreen() {
             keyboardType="email-address"
             error={errors.email}
             placeholder="new-user@expo.dev"
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => passwordRef.current?.focus()}
           />
           <AppTextInput
+            ref={passwordRef}
             label="Password"
             value={form.password}
             onChangeText={(password: string) => setForm((previous) => ({ ...previous, password }))}
             isPasswordField
             error={errors.password}
             placeholder="Password123!"
+            returnKeyType="next"
+            blurOnSubmit={false}
+            onSubmitEditing={() => confirmPasswordRef.current?.focus()}
           />
           <PasswordChecklist password={form.password} />
           <AppTextInput
+            ref={confirmPasswordRef}
             label="Confirm password"
             value={form.confirmPassword}
             onChangeText={(confirmPassword: string) =>
@@ -169,6 +197,8 @@ export default function SignUpScreen() {
             isPasswordField
             error={errors.confirmPassword}
             placeholder="Password123!"
+            returnKeyType="done"
+            onSubmitEditing={handleSubmit}
           />
 
           <Pressable
@@ -203,12 +233,16 @@ export default function SignUpScreen() {
           </Pressable>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  keyboardAvoid: {
     flex: 1,
   },
   scrollContent: {
