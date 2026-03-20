@@ -5,6 +5,7 @@ import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -14,6 +15,8 @@ import {
   TextInput,
   View,
   useColorScheme,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -24,10 +27,16 @@ import { useNativeThemeColors } from "@/hooks/use-native-theme-colors";
 import { useStorageState } from "@/hooks/use-storage-state";
 import {
   DEFAULT_CHAT_MODEL_ID,
-  type ChatMessage,
   listOpenAiCompatibleChatModels,
   streamChatCompletion,
+  type ChatMessage,
 } from "@/services/openrouter-chat";
+import {
+  buildChatTimelineRows,
+  formatMessageTime,
+  type ChatMessageWithTime,
+  type ChatTimelineRow,
+} from "@/utils/chat-timeline";
 import { resolveOpenRouterApiKey } from "@/utils/openrouter-env-defaults";
 import {
   GLOBAL_API_KEY_STORAGE_KEY,
@@ -40,12 +49,6 @@ import {
   getFriendlyChatProviderError,
   logChatProviderError,
 } from "@/utils/provider-chat-error";
-import {
-  buildChatTimelineRows,
-  formatMessageTime,
-  type ChatMessageWithTime,
-  type ChatTimelineRow,
-} from "@/utils/chat-timeline";
 import {
   buildUserPersonalizationSystemMessage,
   getUserProfileStorageKey,
@@ -95,8 +98,21 @@ export default function HomeScreen() {
   const [isMigratingKey, setIsMigratingKey] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  /** When true, new content (e.g. streaming) should keep the list pinned to the bottom. */
   const shouldAutoScrollRef = useRef(true);
   const isAtBottomRef = useRef(true);
+
+  /** Pixels from bottom to count as “at end” (composer + bounce + rounding). */
+  const scrollBottomThreshold = 80;
+  /** Height of composer + error row; FAB sits just above it (avoids FlatList covering the button on Android). */
+  const [bottomChromeHeight, setBottomChromeHeight] = useState(240);
+  /** While true, ignore scroll-away updates so the jump FAB doesn’t flicker during animated scroll-to-end. */
+  const jumpScrollLockUntilRef = useRef(0);
+  const prevScrolledAwayRef = useRef(false);
+  const [showJumpToBottomFab, setShowJumpToBottomFab] = useState(false);
+  const fabOpacity = useRef(new Animated.Value(0)).current;
+  const fabTranslateY = useRef(new Animated.Value(12)).current;
+
   const composerInputRef = useRef<TextInput>(null);
   const generationRunIdRef = useRef(0);
   const chatTimelineRows = useMemo(
@@ -143,20 +159,70 @@ export default function HomeScreen() {
     ],
   );
 
-  useEffect(() => {
-    if (!listRef.current) return;
+  const scrollToEndIfPinned = useCallback(() => {
     if (!shouldAutoScrollRef.current) return;
-    listRef.current.scrollToEnd({ animated: true });
-  }, [chatTimelineRows.length]);
+    listRef.current?.scrollToEnd({ animated: true });
+  }, []);
 
-  const handleScroll = (event: any) => {
-    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+  useEffect(() => {
+    scrollToEndIfPinned();
+  }, [chatTimelineRows.length, scrollToEndIfPinned]);
 
-    const distanceFromBottom =
-      contentSize.height - (contentOffset.y + layoutMeasurement.height);
-    const atBottom = distanceFromBottom <= 24;
-    isAtBottomRef.current = atBottom;
-    shouldAutoScrollRef.current = atBottom;
+  useEffect(() => {
+    const useDriver = Platform.OS !== "web";
+    Animated.parallel([
+      Animated.spring(fabOpacity, {
+        toValue: showJumpToBottomFab ? 1 : 0,
+        useNativeDriver: useDriver,
+        friction: 9,
+        tension: 80,
+      }),
+      Animated.spring(fabTranslateY, {
+        toValue: showJumpToBottomFab ? 0 : 14,
+        useNativeDriver: useDriver,
+        friction: 9,
+        tension: 80,
+      }),
+    ]).start();
+  }, [fabOpacity, fabTranslateY, showJumpToBottomFab]);
+
+  const jumpToBottomAnimated = useCallback(() => {
+    shouldAutoScrollRef.current = true;
+    isAtBottomRef.current = true;
+    prevScrolledAwayRef.current = false;
+    jumpScrollLockUntilRef.current = Date.now() + 450;
+    setShowJumpToBottomFab(false);
+    listRef.current?.scrollToEnd({ animated: true });
+  }, []);
+
+  const updateJumpFabFromScrollEvent = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, layoutMeasurement, contentSize } =
+        event.nativeEvent;
+      if (contentSize.height <= 0 || layoutMeasurement.height <= 0) {
+        return;
+      }
+
+      const distanceFromBottom =
+        contentSize.height - (contentOffset.y + layoutMeasurement.height);
+      const atBottom = distanceFromBottom <= scrollBottomThreshold;
+      isAtBottomRef.current = atBottom;
+      shouldAutoScrollRef.current = atBottom;
+
+      if (Date.now() < jumpScrollLockUntilRef.current) {
+        return;
+      }
+      const scrolledAway = !atBottom;
+      if (prevScrolledAwayRef.current !== scrolledAway) {
+        prevScrolledAwayRef.current = scrolledAway;
+        setShowJumpToBottomFab(scrolledAway);
+      }
+    },
+    [scrollBottomThreshold],
+  );
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    updateJumpFabFromScrollEvent(event);
   };
 
   useEffect(() => {
@@ -167,11 +233,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!modelPickerOpen) return;
-    if (
-      !effectiveOpenRouterKey.trim() ||
-      isKeyLoading ||
-      isSessionLoading
-    ) {
+    if (!effectiveOpenRouterKey.trim() || isKeyLoading || isSessionLoading) {
       return;
     }
 
@@ -238,10 +300,7 @@ export default function HomeScreen() {
   const filteredModelIds = useMemo(() => {
     const q = modelSearch.trim().toLowerCase();
     let list = [...availableModels];
-    if (
-      effectiveChatModelId &&
-      !list.includes(effectiveChatModelId)
-    ) {
+    if (effectiveChatModelId && !list.includes(effectiveChatModelId)) {
       list = [effectiveChatModelId, ...list];
     }
     if (!q) return list;
@@ -310,13 +369,12 @@ export default function HomeScreen() {
             return;
           }
 
-          const [keyNext, urlNext, profileNext, modelNext] =
-            await Promise.all([
-              SecureStore.getItemAsync(storageKey),
-              SecureStore.getItemAsync(baseUrlStorageKey),
-              SecureStore.getItemAsync(profileStorageKey),
-              SecureStore.getItemAsync(modelStorageKey),
-            ]);
+          const [keyNext, urlNext, profileNext, modelNext] = await Promise.all([
+            SecureStore.getItemAsync(storageKey),
+            SecureStore.getItemAsync(baseUrlStorageKey),
+            SecureStore.getItemAsync(profileStorageKey),
+            SecureStore.getItemAsync(modelStorageKey),
+          ]);
           if (isActive) {
             setOpenRouterKey(keyNext);
             setOpenAiBaseUrl(urlNext);
@@ -354,11 +412,8 @@ export default function HomeScreen() {
         m.id === assistantId ? { ...m, content: m.content + tokenBuffer } : m,
       ),
     );
-    // Only auto-scroll when user is already at the bottom.
-    if (!shouldAutoScrollRef.current) return;
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToEnd({ animated: true });
-    });
+    // Scrolling is handled in onContentSizeChange when shouldAutoScrollRef is true
+    // (runs after layout so height includes new tokens).
   };
 
   const handleSend = async () => {
@@ -375,6 +430,8 @@ export default function HomeScreen() {
     // auto-scroll back to the end and keep streaming in view.
     shouldAutoScrollRef.current = true;
     isAtBottomRef.current = true;
+    prevScrolledAwayRef.current = false;
+    setShowJumpToBottomFab(false);
 
     // Wait for key storage unless an env default is available.
     if (isKeyLoading && !resolveOpenRouterApiKey(storedOpenRouterKey).trim()) {
@@ -498,7 +555,10 @@ export default function HomeScreen() {
       setMessages((previous) =>
         previous.map((m) =>
           m.id === assistantMessageId
-            ? { ...m, content: `${m.content ?? ""}${m.content ? "\n\n" : ""}${friendly}` }
+            ? {
+                ...m,
+                content: `${m.content ?? ""}${m.content ? "\n\n" : ""}${friendly}`,
+              }
             : m,
         ),
       );
@@ -554,330 +614,428 @@ export default function HomeScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 8}
       >
-        <FlatList
-          ref={listRef}
-          data={chatTimelineRows}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.messagesContent}
-          keyboardShouldPersistTaps="handled"
-          onScroll={handleScroll}
-          scrollEventThrottle={50}
-          onScrollBeginDrag={() => {
-            // User started interacting; stop forcing scroll until they return to bottom.
-            shouldAutoScrollRef.current = false;
-          }}
-          renderItem={({ item }) =>
-            item.kind === "day" ? (
-              <View style={styles.daySection}>
-                <View
-                  style={[
-                    styles.daySectionLine,
-                    { backgroundColor: colors.border },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.dayPill,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                      ...Platform.select({
-                        ios: {
-                          shadowColor: "#000",
-                          shadowOffset: { width: 0, height: 1 },
-                          shadowOpacity: 0.06,
-                          shadowRadius: 4,
-                        },
-                        default: { elevation: 1 },
-                      }),
-                    },
-                  ]}
-                >
-                  <SymbolView
-                    name={{
-                      ios: "calendar",
-                      android: "calendar_today",
-                      web: "calendar_today",
-                    }}
-                    size={15}
-                    tintColor={colors.secondaryText}
+        <View style={styles.messagesPane}>
+          <FlatList
+            ref={listRef}
+            style={styles.messagesList}
+            data={chatTimelineRows}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.messagesContent}
+            keyboardShouldPersistTaps="handled"
+            onScroll={handleScroll}
+            onScrollEndDrag={updateJumpFabFromScrollEvent}
+            onMomentumScrollEnd={updateJumpFabFromScrollEvent}
+            scrollEventThrottle={16}
+            onContentSizeChange={scrollToEndIfPinned}
+            removeClippedSubviews={false}
+            renderItem={({ item }) =>
+              item.kind === "day" ? (
+                <View style={styles.daySection}>
+                  <View
+                    style={[
+                      styles.daySectionLine,
+                      { backgroundColor: colors.border },
+                    ]}
                   />
-                  <AppText
-                    style={[styles.daySectionLabel, { color: colors.secondaryText }]}
+                  <View
+                    style={[
+                      styles.dayPill,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                        ...Platform.select({
+                          ios: {
+                            shadowColor: "#000",
+                            shadowOffset: { width: 0, height: 1 },
+                            shadowOpacity: 0.06,
+                            shadowRadius: 4,
+                          },
+                          default: { elevation: 1 },
+                        }),
+                      },
+                    ]}
                   >
-                    {item.label}
-                  </AppText>
-                </View>
-                <View
-                  style={[
-                    styles.daySectionLine,
-                    { backgroundColor: colors.border },
-                  ]}
-                />
-              </View>
-            ) : (
-              <View
-                style={[
-                  styles.messageColumn,
-                  item.role === "user"
-                    ? styles.messageColumnUser
-                    : styles.messageColumnAssistant,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.messageBubble,
-                    item.role === "user"
-                      ? {
-                          backgroundColor: colors.primary,
-                          borderWidth: 0,
-                          borderTopLeftRadius: 22,
-                          borderTopRightRadius: 10,
-                          borderBottomLeftRadius: 22,
-                          borderBottomRightRadius: 22,
-                          ...Platform.select({
-                            ios: {
-                              shadowColor: colors.primary,
-                              shadowOffset: { width: 0, height: 3 },
-                              shadowOpacity: 0.28,
-                              shadowRadius: 8,
-                            },
-                            android: { elevation: 3 },
-                            default: {
-                              shadowColor: "#2563EB",
-                              shadowOffset: { width: 0, height: 2 },
-                              shadowOpacity: 0.22,
-                              shadowRadius: 6,
-                            },
-                          }),
-                        }
-                      : {
-                          backgroundColor: colors.surface,
-                          borderColor: colors.border,
-                          borderTopLeftRadius: 10,
-                          borderTopRightRadius: 22,
-                          borderBottomLeftRadius: 22,
-                          borderBottomRightRadius: 22,
-                          ...Platform.select({
-                            ios: {
-                              shadowColor: "#000",
-                              shadowOffset: { width: 0, height: 2 },
-                              shadowOpacity: 0.07,
-                              shadowRadius: 10,
-                            },
-                            android: { elevation: 2 },
-                            default: {
-                              shadowColor: "#000",
-                              shadowOffset: { width: 0, height: 1 },
-                              shadowOpacity: 0.08,
-                              shadowRadius: 8,
-                            },
-                          }),
-                        },
-                  ]}
-                >
-                  {item.role === "assistant" &&
-                  (!item.content || item.content === "...") ? (
+                    <SymbolView
+                      name={{
+                        ios: "calendar",
+                        android: "calendar_today",
+                        web: "calendar_today",
+                      }}
+                      size={15}
+                      tintColor={colors.secondaryText}
+                    />
                     <AppText
                       style={[
-                        styles.assistantThinking,
+                        styles.daySectionLabel,
                         { color: colors.secondaryText },
                       ]}
                     >
-                      Thinking…
+                      {item.label}
                     </AppText>
-                  ) : (
-                    <MarkdownMessage
-                      tone={item.role === "user" ? "onPrimary" : "default"}
-                      markdown={
-                        item.content || (item.role === "assistant" ? "..." : "")
-                      }
-                    />
-                  )}
+                  </View>
+                  <View
+                    style={[
+                      styles.daySectionLine,
+                      { backgroundColor: colors.border },
+                    ]}
+                  />
                 </View>
-                <AppText
+              ) : (
+                <View
                   style={[
-                    styles.messageTime,
-                    {
-                      color: colors.secondaryText,
-                      textAlign: item.role === "user" ? "right" : "left",
-                    },
+                    styles.messageColumn,
+                    item.role === "user"
+                      ? styles.messageColumnUser
+                      : styles.messageColumnAssistant,
                   ]}
                 >
-                  {formatMessageTime(item.createdAt)}
-                </AppText>
-              </View>
-            )
-          }
-        />
+                  <View
+                    style={[
+                      styles.messageBubble,
+                      item.role === "user"
+                        ? {
+                            backgroundColor: colors.primary,
+                            borderWidth: 0,
+                            borderTopLeftRadius: 22,
+                            borderTopRightRadius: 2,
+                            borderBottomLeftRadius: 22,
+                            borderBottomRightRadius: 22,
+                            ...Platform.select({
+                              ios: {
+                                shadowColor: colors.primary,
+                                shadowOffset: { width: 0, height: 3 },
+                                shadowOpacity: 0.28,
+                                shadowRadius: 8,
+                              },
+                              android: { elevation: 3 },
+                              default: {
+                                shadowColor: "#2563EB",
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.22,
+                                shadowRadius: 6,
+                              },
+                            }),
+                          }
+                        : {
+                            backgroundColor: colors.surface,
+                            borderColor: colors.border,
+                            borderTopLeftRadius: 2,
+                            borderTopRightRadius: 22,
+                            borderBottomLeftRadius: 22,
+                            borderBottomRightRadius: 22,
+                            ...Platform.select({
+                              ios: {
+                                shadowColor: "#000",
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.07,
+                                shadowRadius: 10,
+                              },
+                              android: { elevation: 2 },
+                              default: {
+                                shadowColor: "#000",
+                                shadowOffset: { width: 0, height: 1 },
+                                shadowOpacity: 0.08,
+                                shadowRadius: 8,
+                              },
+                            }),
+                          },
+                    ]}
+                  >
+                    {item.role === "assistant" &&
+                    (!item.content || item.content === "...") ? (
+                      <AppText
+                        style={[
+                          styles.assistantThinking,
+                          { color: colors.secondaryText },
+                        ]}
+                      >
+                        Thinking…
+                      </AppText>
+                    ) : (
+                      <MarkdownMessage
+                        tone={item.role === "user" ? "onPrimary" : "default"}
+                        markdown={
+                          item.content ||
+                          (item.role === "assistant" ? "..." : "")
+                        }
+                      />
+                    )}
+                  </View>
+                  <AppText
+                    style={[
+                      styles.messageTime,
+                      {
+                        color: colors.secondaryText,
+                        textAlign: item.role === "user" ? "right" : "left",
+                      },
+                    ]}
+                  >
+                    {formatMessageTime(item.createdAt)}
+                  </AppText>
+                </View>
+              )
+            }
+          />
+        </View>
 
         <View
-          style={[
-            styles.composerCard,
-            {
-              borderColor: colors.border,
-              backgroundColor: colors.surface,
-            },
-          ]}
+          onLayout={(e) => {
+            const h = e.nativeEvent.layout.height;
+            if (h > 0) setBottomChromeHeight(h);
+          }}
         >
-          <View style={styles.composerInputRow}>
-            <TextInput
-              ref={composerInputRef}
-              placeholder="Message…"
-              placeholderTextColor={colors.placeholder as string}
-              value={text}
-              onChangeText={setText}
-              multiline
-              textAlignVertical="top"
-              style={[
-                styles.input,
-                {
-                  color: colors.text,
-                },
-              ]}
-              onSubmitEditing={() => {
-                if (isGenerating) return;
-                void handleSend();
-              }}
-              returnKeyType="default"
-            />
-            <Pressable
-              onPress={isGenerating ? handleStop : handleSend}
-              disabled={!isGenerating && !canSend}
-              style={({ pressed }) => [
-                styles.sendButton,
-                {
-                  backgroundColor: isGenerating
-                    ? colors.error
-                    : canSend
-                      ? colors.primary
-                      : colors.border,
-                  opacity: pressed ? 0.9 : 1,
-                },
-              ]}
-            >
-              <SymbolView
-                name={
-                  isGenerating
-                    ? { ios: "stop.fill", android: "stop", web: "stop" }
-                    : { ios: "paperplane.fill", android: "send", web: "send" }
-                }
-                size={18}
-                tintColor="#FFFFFF"
-              />
-            </Pressable>
-          </View>
-
-          {!effectiveOpenRouterKey.trim() ? (
-            <View style={styles.composerInlineHintWrap}>
-              <AppText
-                muted
-                style={[styles.composerInlineHintText, { color: colors.secondaryText }]}
-              >
-                Settings → AI settings → save your key, then pick a model below.
-              </AppText>
-            </View>
-          ) : modelsStatus === "error" && modelsErrorMessage ? (
-            <Pressable
-              onPress={handleRetryLoadModels}
-              style={styles.composerInlineHintWrap}
-              accessibilityRole="button"
-              accessibilityLabel="Retry loading models"
-            >
-              <AppText
-                style={[styles.composerInlineHintText, { color: colors.error }]}
-                numberOfLines={2}
-              >
-                Models didn’t load. Tap to retry.
-              </AppText>
-            </Pressable>
-          ) : null}
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Choose AI model"
-            accessibilityState={{ disabled: !effectiveOpenRouterKey.trim() }}
-            onPress={() => {
-              setModelSearch("");
-              setModelPickerOpen(true);
-            }}
-            disabled={!effectiveOpenRouterKey.trim()}
-            style={({ pressed }) => [
-              styles.composerModelStrip,
+          <View
+            style={[
+              styles.composerCard,
               {
-                borderTopColor: colors.border,
-                opacity: !effectiveOpenRouterKey.trim()
-                  ? 0.65
-                  : pressed
-                    ? 0.92
-                    : 1,
+                borderColor: colors.border,
+                backgroundColor: colors.surface,
               },
             ]}
           >
-            <View
-              style={[
-                styles.composerModelIconWrap,
-                { backgroundColor: colors.background },
+            <View style={styles.composerInputRow}>
+              <TextInput
+                ref={composerInputRef}
+                placeholder="Message…"
+                placeholderTextColor={colors.placeholder as string}
+                value={text}
+                onChangeText={setText}
+                multiline
+                textAlignVertical="top"
+                style={[
+                  styles.input,
+                  {
+                    color: colors.text,
+                  },
+                ]}
+                onSubmitEditing={() => {
+                  if (isGenerating) return;
+                  void handleSend();
+                }}
+                returnKeyType="default"
+              />
+              <Pressable
+                onPress={isGenerating ? handleStop : handleSend}
+                disabled={!isGenerating && !canSend}
+                style={({ pressed }) => [
+                  styles.sendButton,
+                  {
+                    backgroundColor: isGenerating
+                      ? colors.error
+                      : canSend
+                        ? colors.primary
+                        : colors.border,
+                    opacity: pressed ? 0.9 : 1,
+                  },
+                ]}
+              >
+                <SymbolView
+                  name={
+                    isGenerating
+                      ? { ios: "stop.fill", android: "stop", web: "stop" }
+                      : { ios: "paperplane.fill", android: "send", web: "send" }
+                  }
+                  size={18}
+                  tintColor="#FFFFFF"
+                />
+              </Pressable>
+            </View>
+
+            {!effectiveOpenRouterKey.trim() ? (
+              <View style={styles.composerInlineHintWrap}>
+                <AppText
+                  muted
+                  style={[
+                    styles.composerInlineHintText,
+                    { color: colors.secondaryText },
+                  ]}
+                >
+                  Settings → AI settings → save your key, then pick a model
+                  below.
+                </AppText>
+              </View>
+            ) : modelsStatus === "error" && modelsErrorMessage ? (
+              <Pressable
+                onPress={handleRetryLoadModels}
+                style={styles.composerInlineHintWrap}
+                accessibilityRole="button"
+                accessibilityLabel="Retry loading models"
+              >
+                <AppText
+                  style={[
+                    styles.composerInlineHintText,
+                    { color: colors.error },
+                  ]}
+                  numberOfLines={2}
+                >
+                  Models didn’t load. Tap to retry.
+                </AppText>
+              </Pressable>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Choose AI model"
+              accessibilityState={{ disabled: !effectiveOpenRouterKey.trim() }}
+              onPress={() => {
+                setModelSearch("");
+                setModelPickerOpen(true);
+              }}
+              disabled={!effectiveOpenRouterKey.trim()}
+              style={({ pressed }) => [
+                styles.composerModelStrip,
+                {
+                  borderTopColor: colors.border,
+                  opacity: !effectiveOpenRouterKey.trim()
+                    ? 0.65
+                    : pressed
+                      ? 0.92
+                      : 1,
+                },
               ]}
             >
-              <SymbolView
-                name={{
-                  ios: "sparkles",
-                  android: "auto_awesome",
-                  web: "auto_awesome",
-                }}
-                size={18}
-                tintColor={colors.primary}
-              />
-            </View>
-            <View style={styles.composerModelTextCol}>
-              <AppText
-                muted
-                style={[styles.composerModelCaption, { color: colors.secondaryText }]}
+              <View
+                style={[
+                  styles.composerModelIconWrap,
+                  { backgroundColor: colors.background },
+                ]}
               >
-                Model
-              </AppText>
+                <SymbolView
+                  name={{
+                    ios: "sparkles",
+                    android: "auto_awesome",
+                    web: "auto_awesome",
+                  }}
+                  size={18}
+                  tintColor={colors.primary}
+                />
+              </View>
+              <View style={styles.composerModelTextCol}>
+                <AppText
+                  muted
+                  style={[
+                    styles.composerModelCaption,
+                    { color: colors.secondaryText },
+                  ]}
+                >
+                  Model
+                </AppText>
+                <AppText
+                  numberOfLines={1}
+                  style={[styles.composerModelName, { color: colors.text }]}
+                >
+                  {effectiveOpenRouterKey.trim()
+                    ? effectiveChatModelId
+                    : "Add an API key to chat"}
+                </AppText>
+              </View>
+              {modelsStatus === "loading" ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <SymbolView
+                  name={{
+                    ios: "chevron.down",
+                    android: "expand_more",
+                    web: "expand_more",
+                  }}
+                  size={18}
+                  tintColor={colors.secondaryText}
+                />
+              )}
+            </Pressable>
+          </View>
+
+          {error ? (
+            <AppText style={[styles.errorText, { color: colors.primary }]}>
+              {error}
+            </AppText>
+          ) : null}
+          {error ===
+          "OpenRouter API key for your account is missing. Add it now." ? (
+            <Pressable
+              onPress={() => router.push("/settings-ai")}
+              style={styles.errorLink}
+            >
               <AppText
-                numberOfLines={1}
-                style={[styles.composerModelName, { color: colors.text }]}
+                style={[styles.errorLinkText, { color: colors.primary }]}
               >
-                {effectiveOpenRouterKey.trim()
-                  ? effectiveChatModelId
-                  : "Add an API key to chat"}
+                Enter API key
               </AppText>
-            </View>
-            {modelsStatus === "loading" ? (
+            </Pressable>
+          ) : null}
+        </View>
+
+        <Animated.View
+          collapsable={false}
+          pointerEvents={showJumpToBottomFab ? "box-none" : "none"}
+          style={[
+            styles.jumpFabDock,
+            Platform.OS === "android" ? { elevation: 24 } : null,
+            {
+              bottom: bottomChromeHeight + 10,
+              opacity: fabOpacity,
+              transform: [{ translateY: fabTranslateY }],
+            },
+          ]}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityHint="Scrolls the chat to the newest messages with animation."
+            accessibilityLabel={
+              isGenerating
+                ? "Scroll to bottom, reply is still generating"
+                : "Scroll to bottom"
+            }
+            onPress={jumpToBottomAnimated}
+            style={({ pressed }) => [
+              styles.jumpFab,
+              isGenerating ? styles.jumpFabGenerating : styles.jumpFabIdle,
+              {
+                backgroundColor: colors.surface,
+                borderColor: isGenerating ? colors.primary : colors.border,
+                opacity: pressed ? 0.88 : 1,
+                ...Platform.select({
+                  ios: {
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: isGenerating ? 0.14 : 0.1,
+                    shadowRadius: isGenerating ? 10 : 8,
+                  },
+                  android: { elevation: isGenerating ? 8 : 6 },
+                  default: {
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.12,
+                    shadowRadius: 8,
+                  },
+                }),
+              },
+            ]}
+          >
+            {isGenerating ? (
               <ActivityIndicator size="small" color={colors.primary} />
             ) : (
               <SymbolView
                 name={{
-                  ios: "chevron.down",
-                  android: "expand_more",
-                  web: "expand_more",
+                  ios: "arrow.down.circle.fill",
+                  android: "arrow_downward",
+                  web: "arrow_downward",
                 }}
-                size={18}
+                size={22}
                 tintColor={colors.secondaryText}
               />
             )}
-          </Pressable>
-        </View>
-
-        {error ? (
-          <AppText style={[styles.errorText, { color: colors.primary }]}>
-            {error}
-          </AppText>
-        ) : null}
-        {error ===
-        "OpenRouter API key for your account is missing. Add it now." ? (
-          <Pressable
-            onPress={() => router.push("/settings-ai")}
-            style={styles.errorLink}
-          >
-            <AppText style={[styles.errorLinkText, { color: colors.primary }]}>
-              Enter API key
+            <AppText
+              style={[
+                styles.jumpFabLabel,
+                { color: isGenerating ? colors.primary : colors.text },
+              ]}
+              numberOfLines={1}
+            >
+              {isGenerating ? "Catch up" : "Latest"}
             </AppText>
           </Pressable>
-        ) : null}
+        </Animated.View>
       </KeyboardAvoidingView>
 
       <Modal
@@ -968,88 +1126,88 @@ export default function HomeScreen() {
                 contentContainerStyle={styles.modalListContent}
                 style={styles.modalModelList}
                 renderItem={({ item }) => {
-                const isSelected = item === effectiveChatModelId;
-                return (
-                  // Padding wrapper: keeps selected border/shadow inside layout bounds so
-                  // FlatList / neighbors don't clip the bottom edge.
-                  <View
-                    style={[
-                      styles.modelListCellWrap,
-                      isSelected && styles.modelListCellWrapSelected,
-                    ]}
-                  >
-                    <Pressable
-                      onPress={() => {
-                        setStoredChatModelId(item);
-                        setModelPickerOpen(false);
-                        setModelSearch("");
-                      }}
+                  const isSelected = item === effectiveChatModelId;
+                  return (
+                    // Padding wrapper: keeps selected border/shadow inside layout bounds so
+                    // FlatList / neighbors don't clip the bottom edge.
+                    <View
                       style={[
-                        styles.modelListRow,
-                        !isSelected && {
-                          borderBottomColor: colors.border,
-                        },
-                        isSelected && {
-                          marginHorizontal: 8,
-                          paddingVertical: 16,
-                          paddingHorizontal: 14,
-                          borderRadius: 14,
-                          borderWidth: 2,
-                          borderColor: colors.primary,
-                          backgroundColor: colors.surface,
-                          borderBottomWidth: 2,
-                          // Subtle emphasis so it reads even if surface ≈ background
-                          shadowColor: "#000",
-                          shadowOffset: { width: 0, height: 1 },
-                          shadowOpacity: 0.12,
-                          shadowRadius: 3,
-                          elevation: 3,
-                        },
+                        styles.modelListCellWrap,
+                        isSelected && styles.modelListCellWrapSelected,
                       ]}
                     >
-                      <AppText
+                      <Pressable
+                        onPress={() => {
+                          setStoredChatModelId(item);
+                          setModelPickerOpen(false);
+                          setModelSearch("");
+                        }}
                         style={[
-                          styles.modelListRowText,
-                          {
-                            color: isSelected ? colors.primary : colors.text,
-                            fontWeight: isSelected ? "800" : "500",
+                          styles.modelListRow,
+                          !isSelected && {
+                            borderBottomColor: colors.border,
+                          },
+                          isSelected && {
+                            marginHorizontal: 8,
+                            paddingVertical: 16,
+                            paddingHorizontal: 14,
+                            borderRadius: 14,
+                            borderWidth: 2,
+                            borderColor: colors.primary,
+                            backgroundColor: colors.surface,
+                            borderBottomWidth: 2,
+                            // Subtle emphasis so it reads even if surface ≈ background
+                            shadowColor: "#000",
+                            shadowOffset: { width: 0, height: 1 },
+                            shadowOpacity: 0.12,
+                            shadowRadius: 3,
+                            elevation: 3,
                           },
                         ]}
-                        numberOfLines={2}
                       >
-                        {item}
-                      </AppText>
-                      {isSelected ? (
-                        <View
+                        <AppText
                           style={[
-                            styles.modelSelectedCheckWrap,
-                            { backgroundColor: colors.primary },
+                            styles.modelListRowText,
+                            {
+                              color: isSelected ? colors.primary : colors.text,
+                              fontWeight: isSelected ? "800" : "500",
+                            },
                           ]}
+                          numberOfLines={2}
                         >
-                          <SymbolView
-                            name={{
-                              ios: "checkmark",
-                              android: "check",
-                              web: "check",
-                            }}
-                            size={14}
-                            tintColor="#FFFFFF"
-                            weight="bold"
-                          />
-                        </View>
-                      ) : null}
-                    </Pressable>
-                  </View>
-                );
-              }}
-              ListEmptyComponent={
-                <AppText muted style={styles.modalEmpty}>
-                  {modelSearch.trim()
-                    ? "No models match your search."
-                    : "No models returned from the provider."}
-                </AppText>
-              }
-            />
+                          {item}
+                        </AppText>
+                        {isSelected ? (
+                          <View
+                            style={[
+                              styles.modelSelectedCheckWrap,
+                              { backgroundColor: colors.primary },
+                            ]}
+                          >
+                            <SymbolView
+                              name={{
+                                ios: "checkmark",
+                                android: "check",
+                                web: "check",
+                              }}
+                              size={14}
+                              tintColor="#FFFFFF"
+                              weight="bold"
+                            />
+                          </View>
+                        ) : null}
+                      </Pressable>
+                    </View>
+                  );
+                }}
+                ListEmptyComponent={
+                  <AppText muted style={styles.modalEmpty}>
+                    {modelSearch.trim()
+                      ? "No models match your search."
+                      : "No models returned from the provider."}
+                  </AppText>
+                }
+              />
             )}
           </View>
         </SafeAreaView>
@@ -1064,6 +1222,41 @@ const styles = StyleSheet.create({
   },
   keyboardRoot: {
     flex: 1,
+    position: "relative",
+  },
+  messagesPane: {
+    flex: 1,
+    minHeight: 0,
+  },
+  messagesList: {
+    flex: 1,
+  },
+  /** Docked above measured composer stack so the native list can’t paint over the pill (Android). */
+  jumpFabDock: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 999,
+  },
+  jumpFab: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 999,
+  },
+  jumpFabGenerating: {
+    borderWidth: 2,
+  },
+  jumpFabIdle: {
+    borderWidth: StyleSheet.hairlineWidth * 2,
+  },
+  jumpFabLabel: {
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0.2,
   },
   messagesContent: {
     paddingHorizontal: 14,
