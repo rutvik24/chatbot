@@ -22,8 +22,8 @@ Main routes:
 |--------|---------|
 | `/(main)/(tabs)/index` | Chat: **`TabScreenHeader`** “Chat”; streaming, composer, model picker strip, scroll / catch-up UX; **New chat** in drawer |
 | `/(main)/(tabs)/settings` | **`TabScreenHeader`** “Settings”; Profile & AI links, **Appearance**, sign out, error-boundary test; **☰** opens same drawer (**New chat**) |
-| `/(auth)/settings-ai` | API key, base URL (scroll; `SafeAreaView` edges bottom/left/right under header) |
-| `/(auth)/settings-profile` | Name fields for personalization system message |
+| `/(auth)/settings-ai` | **AI connection** hero, **Provider URL** + **API key** sections with info callouts, carded fields, stacked actions, success/error feedback |
+| `/(auth)/settings-profile` | **Your profile** hero (avatar + email), personalization copy, carded name fields, save + success banner |
 | `/(auth)/settings-security` | Change password + sign out |
 | `/(auth)/change-password` | Password change |
 | `/(auth)/sign-in` | Sign in (native header, no back) |

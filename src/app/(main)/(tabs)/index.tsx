@@ -121,8 +121,8 @@ export default function HomeScreen() {
    */
   const stickToBottomRef = useRef(false);
   const STICK_TO_BOTTOM_CANCEL_PX = 200;
-  /** While generating + pinned, ignore small layout jumps so we don’t drop follow mode. */
-  const STICK_CANCEL_WHILE_GENERATING_PX = 560;
+  /** While generating + pinned, tolerate small layout jitter before treating the user as “scrolled away”. */
+  const STICK_CANCEL_WHILE_GENERATING_PX = 280;
   const prevScrolledAwayRef = useRef(false);
   const isGeneratingRef = useRef(false);
   const [showJumpToBottomFab, setShowJumpToBottomFab] = useState(false);
@@ -306,7 +306,36 @@ export default function HomeScreen() {
     [scrollBottomThreshold],
   );
 
+  /**
+   * When the user manually scrolls, stop auto follow — otherwise `onContentSizeChange`
+   * during streaming keeps calling `scrollToEnd` and fights the gesture.
+   */
+  const releaseAutoFollowFromUserScroll = useCallback(() => {
+    stickToBottomRef.current = false;
+    shouldAutoScrollRef.current = false;
+  }, []);
+
+  const handleScrollBeginDrag = useCallback(() => {
+    releaseAutoFollowFromUserScroll();
+  }, [releaseAutoFollowFromUserScroll]);
+
+  const handleMomentumScrollBegin = useCallback(() => {
+    releaseAutoFollowFromUserScroll();
+  }, [releaseAutoFollowFromUserScroll]);
+
+  /** Tracks offset so wheel / trackpad scroll-up (e.g. web) can release follow without begin-drag. */
+  const lastScrollOffsetYRef = useRef(0);
+
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = event.nativeEvent.contentOffset.y;
+    // Only while streaming: wheel/trackpad up shouldn’t be confused with “new chat” scroll reset.
+    if (
+      isGeneratingRef.current &&
+      y < lastScrollOffsetYRef.current - 6
+    ) {
+      releaseAutoFollowFromUserScroll();
+    }
+    lastScrollOffsetYRef.current = y;
     updateJumpFabFromScrollEvent(event);
   };
 
@@ -697,6 +726,7 @@ export default function HomeScreen() {
     prevScrolledAwayRef.current = false;
     jumpScrollLockUntilRef.current = 0;
     setShowJumpToBottomFab(false);
+    lastScrollOffsetYRef.current = 0;
     requestAnimationFrame(() => {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
     });
@@ -760,6 +790,8 @@ export default function HomeScreen() {
             contentContainerStyle={styles.messagesContent}
             keyboardShouldPersistTaps="handled"
             onScroll={handleScroll}
+            onScrollBeginDrag={handleScrollBeginDrag}
+            onMomentumScrollBegin={handleMomentumScrollBegin}
             onScrollEndDrag={updateJumpFabFromScrollEvent}
             onMomentumScrollEnd={updateJumpFabFromScrollEvent}
             scrollEventThrottle={16}

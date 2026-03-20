@@ -6,6 +6,7 @@ Authentication is implemented as an in-app demo/local flow in `src/ctx/auth-cont
 
 - A successful sign-in sets `session-<normalizedEmail>` as the session id.
 - The root router uses this session to protect routes via `Stack.Protected`.
+- **UI:** use `displayEmailFromSession()` from `src/utils/session-email.ts` to show the real address (strip the `session-` prefix). Keep the raw session string for storage keys (`getAiApiKeyStorageKey`, profile keys, etc.).
 
 ## Credentials storage (demo/local)
 

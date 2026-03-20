@@ -6,7 +6,7 @@ This project uses Expo Router (file-based routing) and a small set of well-separ
 - `src/components/`: reusable UI components (buttons, inputs, markdown renderer, native tabs wrapper, **tab screen header**, drawer content, etc.)
 - `src/ctx/`: app-wide React context (authentication/session, theme preference, **chat actions** for drawer → new chat)
 - `src/services/`: network + streaming logic for AI
-- `src/utils/`: helpers (AI credentials storage, env defaults, navigation theme, personalization, error mapping)
+- `src/utils/`: helpers (AI credentials storage, env defaults, navigation theme, personalization, **`session-email`** for display labels, error mapping)
 - `src/constants/`: small shared constants (e.g. theme preference helpers)
 - `src/hooks/`: small state/hooks wrappers (theme + storage)
 

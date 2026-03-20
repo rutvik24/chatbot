@@ -25,6 +25,7 @@ import type { ThemePreference } from '@/constants/theme-preference';
 import { useSession } from '@/ctx/auth-context';
 import { useThemePreference } from '@/ctx/theme-preference-context';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
+import { displayEmailFromSession } from '@/utils/session-email';
 
 type SettingsLinkIcon = {
   ios: string;
@@ -249,7 +250,8 @@ export default function SettingsScreen() {
     [],
   );
 
-  const emailDisplay = session?.trim() || 'Your account';
+  const emailDisplay =
+    displayEmailFromSession(session).trim() || 'Your account';
   const avatarLetter = emailDisplay.charAt(0).toUpperCase();
 
   if (shouldTestBoundary) {
