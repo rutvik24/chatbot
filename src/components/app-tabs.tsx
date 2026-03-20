@@ -22,16 +22,19 @@ export default function AppTabs() {
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>Chat</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          sf={{ default: 'message', selected: 'message.fill' }}
-          drawable="ic_dialog_email"
+          sf={{
+            default: 'bubble.left.and.bubble.right',
+            selected: 'bubble.left.and.bubble.right.fill',
+          }}
+          md="chat_bubble"
         />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="settings">
         <NativeTabs.Trigger.Label>Settings</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          sf={{ default: 'slider.horizontal.3', selected: 'slider.horizontal.3' }}
-          drawable="ic_menu_preferences"
+          sf={{ default: 'gearshape', selected: 'gearshape.fill' }}
+          md="settings"
         />
       </NativeTabs.Trigger>
     </NativeTabs>
