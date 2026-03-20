@@ -14,6 +14,170 @@ import {
 
 type ErrorBody = Record<string, unknown> | undefined;
 
+function safeJson(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+/** True when the server/SDK string doesn’t explain what went wrong. */
+function isVagueProviderText(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/^\d{3}\s+/, '');
+  if (t.length === 0 || t.length < 3) return true;
+  const vague = [
+    'provider returned error',
+    'provider returned an error',
+    'an error occurred',
+    'internal error',
+    'unknown error',
+    'error',
+    'bad request',
+    'status code (no body)',
+    '(no status code or body)',
+  ];
+  return vague.some((v) => t === v || t.startsWith(`${v}.`) || t.includes(v));
+}
+
+/**
+ * Logs the full error to the console (Metro / Xcode / Logcat). Call this for every
+ * chat/provider failure so debugging doesn’t rely on shortened UI copy.
+ */
+export function logChatProviderError(error: unknown, context = 'chat-provider'): void {
+  const tag = `[${context}]`;
+
+  if (error instanceof APIError) {
+    let headerDump: Record<string, string> | undefined;
+    try {
+      const h = error.headers as Headers | undefined;
+      if (h && typeof h.entries === 'function') {
+        headerDump = {};
+        for (const [k, v] of h.entries()) {
+          const lk = k.toLowerCase();
+          if (
+            lk.includes('request') ||
+            lk.includes('retry') ||
+            lk === 'content-type' ||
+            lk === 'www-authenticate'
+          ) {
+            headerDump[k] = v;
+          }
+        }
+      }
+    } catch {
+      headerDump = undefined;
+    }
+
+    console.error(tag, 'APIError', {
+      constructor: error.constructor?.name,
+      message: error.message,
+      status: error.status,
+      code: error.code,
+      type: error.type,
+      param: error.param,
+      requestID: error.requestID,
+      errorBody: error.error,
+      errorBodyJson: safeJson(error.error),
+      headers: headerDump,
+    });
+    return;
+  }
+
+  if (error instanceof Error) {
+    const withCause = error as Error & { cause?: unknown };
+    console.error(tag, 'Error', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      cause: withCause.cause,
+      causeJson:
+        withCause.cause !== undefined ? safeJson(withCause.cause) : undefined,
+    });
+    return;
+  }
+
+  console.error(tag, 'Non-Error throw', {
+    value: error,
+    json: safeJson(error),
+  });
+}
+
+/** True if text looks like JSON or a structured dump — never show that in the chat UI. */
+function isLikelyJsonOrCodeDump(text: string): boolean {
+  const t = text.trim();
+  if (t.length > 240) return true;
+  if (/^\s*[\[{]/.test(t) && /["']?\s*:\s*/.test(t)) return true;
+  if (t.includes('{') && t.includes('}') && t.includes('"')) return true;
+  return false;
+}
+
+/**
+ * True when provider/SDK text must not be shown in chat (env names, keys, auth headers, etc.).
+ * Full text is still logged via {@link logChatProviderError}.
+ */
+function isSensitiveForUserChat(text: string): boolean {
+  const t = text;
+  if (/EXPO_PUBLIC_[A-Z0-9_]+/i.test(t)) return true;
+  if (
+    /OPENROUTER_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|SUPABASE_[A-Z0-9_]+/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  if (/\b\.env\b/i.test(t)) return true;
+  if (/process\.env/i.test(t)) return true;
+  if (/\bsk-[a-zA-Z0-9_-]{8,}\b/.test(t)) return true;
+  if (/\beyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]+\./.test(t)) return true;
+  if (/\bBearer\s+[A-Za-z0-9._~-]+\b/i.test(t)) return true;
+  if (/api[_-]?key\s*[:=]\s*[^\s"'<>]{4,}/i.test(t)) return true;
+  if (/authorization\s*:\s*[^\s]+/i.test(t)) return true;
+  if (/x-api-key\s*[:=]\s*[^\s]+/i.test(t)) return true;
+  if (/\bBasic\s+[A-Za-z0-9+/=]{12,}\b/i.test(t)) return true;
+  // Avoid leaking local file paths from SDK / runtime errors in chat.
+  if (/\/Users\//.test(t) || /\/home\/[^/\s"']+\//i.test(t)) return true;
+  if (/\b[a-z]:\\Users\\/i.test(t)) return true;
+  return false;
+}
+
+/** Redact token-like substrings so accidental leaks never reach the chat UI. */
+function redactSensitiveForUserChat(text: string): string {
+  return text
+    .replace(/\bsk-[a-zA-Z0-9_-]{8,}\b/gi, '[key]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~-]+\b/gi, 'Bearer [key]')
+    .replace(/\bBasic\s+[A-Za-z0-9+/=]{12,}\b/gi, 'Basic [redacted]')
+    .replace(
+      /([?&])(api[_-]?key|access[_-]?token|token|secret|password)=([^&\s]+)/gi,
+      '$1$2=[redacted]',
+    )
+    .trim();
+}
+
+/**
+ * Provider-supplied or SDK error text safe to show in chat: not vague, not JSON, not sensitive.
+ */
+function userSafeErrorFragment(
+  text: string | undefined,
+  maxLen: number,
+): string | undefined {
+  if (!text) return undefined;
+  const t = text.trim();
+  if (!t || isVagueProviderText(t) || isLikelyJsonOrCodeDump(t)) return undefined;
+  if (isSensitiveForUserChat(t)) return undefined;
+  const redacted = redactSensitiveForUserChat(t);
+  if (!redacted || isSensitiveForUserChat(redacted)) return undefined;
+  return redacted.length <= maxLen ? redacted : `${redacted.slice(0, maxLen - 1)}…`;
+}
+
+/**
+ * A single human-readable line from the API error body for on-screen copy only.
+ * Full JSON is logged via {@link logChatProviderError}; this must never return raw JSON.
+ */
+function humanLineFromApiErrorBody(body: ErrorBody): string | undefined {
+  return userSafeErrorFragment(readNestedMessage(body), 200);
+}
+
 function readNestedMessage(body: ErrorBody): string | undefined {
   if (!body || typeof body !== 'object') return undefined;
   const o = body as Record<string, unknown>;
@@ -106,6 +270,8 @@ function errorConstructorName(error: unknown): string | undefined {
  * Turns OpenAI-compatible provider / SDK errors into short, user-facing text.
  */
 export function getFriendlyChatProviderError(error: unknown): string {
+  logChatProviderError(error, 'getFriendlyChatProviderError');
+
   if (error instanceof APIUserAbortError) {
     return 'The request was cancelled.';
   }
@@ -129,25 +295,57 @@ export function getFriendlyChatProviderError(error: unknown): string {
     return 'Access was denied. Your key may not be allowed to use this model or endpoint.';
   }
   if (error instanceof NotFoundError) {
-    return 'The API returned “not found.” Check your base URL and model id in AI settings.';
+    return 'The API returned “not found” (404). Check AI settings: use a full OpenAI-compatible base URL (OpenRouter: https://openrouter.ai/api/v1) and a model id from the model list.';
   }
   if (error instanceof RateLimitError) {
-    return 'Rate limit reached. Wait a bit and try again.';
+    const body = error.error as ErrorBody;
+    const code =
+      readErrorCode(body) ??
+      (typeof error.code === 'string' ? error.code : undefined);
+    if (code) {
+      const fromCode = friendlyFromProviderCode(code);
+      if (fromCode) return fromCode;
+    }
+
+    let retryAfter = '';
+    try {
+      const headers = error.headers as Headers | undefined;
+      if (headers && typeof headers.get === 'function') {
+        const ra = headers.get('retry-after');
+        if (ra?.trim()) retryAfter = ` Retry after ${ra.trim()}s.`;
+      }
+    } catch {
+      // ignore header parse issues
+    }
+
+    const detail429 = userSafeErrorFragment(readNestedMessage(body), 280);
+    if (detail429) {
+      return `${detail429}${retryAfter}`;
+    }
+
+    return (
+      'Too many requests for your account or this model. ' +
+      'Free models have low quotas—try another free model from the model list, wait, or add credits in your provider account. ' +
+      'If several people share the same default key, add your own key in AI settings.' +
+      retryAfter
+    );
   }
   if (error instanceof BadRequestError) {
-    const detail = readNestedMessage(error.error as ErrorBody);
-    const code = readErrorCode(error.error as ErrorBody);
+    const body = error.error as ErrorBody;
+    const code = readErrorCode(body);
     const fromCode = code ? friendlyFromProviderCode(code) : undefined;
     if (fromCode) return fromCode;
-    if (detail && detail.length < 200) {
-      return `The request was not accepted: ${detail}`;
+    const detail400 = userSafeErrorFragment(readNestedMessage(body), 200);
+    if (detail400) {
+      return `The request was not accepted: ${detail400}`;
     }
     return 'The request was not accepted. Check your message, model, and AI settings.';
   }
   if (error instanceof UnprocessableEntityError) {
-    const detail = readNestedMessage(error.error as ErrorBody);
-    if (detail && detail.length < 200) {
-      return `Could not process the request: ${detail}`;
+    const body = error.error as ErrorBody;
+    const human422 = humanLineFromApiErrorBody(body);
+    if (human422) {
+      return `Could not process the request: ${human422}`;
     }
     return 'Could not process the request. Check AI settings and try again.';
   }
@@ -176,7 +374,7 @@ export function getFriendlyChatProviderError(error: unknown): string {
       return 'Access was denied. Check your API key permissions or model access.';
     }
     if (status === 404) {
-      return 'The API path or model was not found. Check base URL and model in AI settings.';
+      return 'The API returned “not found” (404). Check AI settings: OpenRouter base URL should be https://openrouter.ai/api/v1; pick a valid model from the chat model list.';
     }
     if (status === 429) {
       return 'Too many requests. Wait a moment and try again.';
@@ -185,26 +383,43 @@ export function getFriendlyChatProviderError(error: unknown): string {
       return 'The AI provider is having trouble. Try again shortly.';
     }
 
-    const detail = readNestedMessage(body);
-    if (detail) {
-      const fromDetail = friendlyFromRawMessage(detail);
+    const rawDetail = readNestedMessage(body);
+    if (
+      rawDetail &&
+      !isVagueProviderText(rawDetail) &&
+      !isLikelyJsonOrCodeDump(rawDetail)
+    ) {
+      const fromDetail = friendlyFromRawMessage(rawDetail);
       if (fromDetail) return fromDetail;
       const fromDetailCode = readErrorCode(body);
       if (fromDetailCode) {
         const f = friendlyFromProviderCode(fromDetailCode);
         if (f) return f;
       }
-      if (detail.length <= 220) {
-        return detail;
-      }
+    }
+    const detail = userSafeErrorFragment(rawDetail, 220);
+    if (detail) {
+      return detail;
+    }
+
+    const humanFallback = humanLineFromApiErrorBody(body);
+    if (humanFallback) {
+      const prefix =
+        typeof status === 'number'
+          ? `Something went wrong (HTTP ${status})`
+          : 'Something went wrong';
+      return `${prefix}. ${humanFallback}`;
+    }
+
+    if (typeof status === 'number') {
+      return `Something went wrong (HTTP ${status}). Check AI settings (connection and model). For technical details, use the developer console.`;
     }
 
     if (typeof error.message === 'string' && error.message.trim()) {
       const fromMsg = friendlyFromRawMessage(error.message);
       if (fromMsg) return fromMsg;
-      if (error.message.length <= 220) {
-        return error.message.trim();
-      }
+      const safeMsg = userSafeErrorFragment(error.message, 220);
+      if (safeMsg) return safeMsg;
     }
   }
 
@@ -214,10 +429,9 @@ export function getFriendlyChatProviderError(error: unknown): string {
     if (error.name === 'AbortError') {
       return 'The request was cancelled.';
     }
-    if (error.message.trim() && error.message.length <= 220) {
-      return error.message.trim();
-    }
+    const safeMsg = userSafeErrorFragment(error.message, 220);
+    if (safeMsg) return safeMsg;
   }
 
-  return 'Something went wrong while getting a reply. Please try again.';
+  return 'Something went wrong while getting a reply. Check AI settings and try again.';
 }

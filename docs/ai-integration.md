@@ -18,11 +18,21 @@ Important implementation detail:
 
 ## Model selection
 
-The chat screen currently uses a hardcoded model id:
+The chat screen loads available models via the **OpenAI SDK** `client.models.list()` (same `baseURL` + API key as chat).
 
-- `openrouter/free`
+- Default when nothing is saved: `meta-llama/llama-3.2-3b-instruct:free` (OpenRouter per-model free tier; avoids the shared `openrouter/free` pool that rate-limits aggressively)
+- The user picks a model from a modal list; the choice is stored per account (secure storage on native, `localStorage` on web)
+- Search filters the list; the current selection is pinned at the top if the API list changes
 
-Model selection is not exposed in UI yet.
+## Base URL (404 / “not found”)
+
+The OpenAI SDK expects `baseURL` to include the API version segment:
+
+- **OpenRouter:** `https://openrouter.ai/api/v1` (entering `https://openrouter.ai` or `https://openrouter.ai/api` is coerced to this.)
+- **OpenAI:** `https://api.openai.com/v1`
+- **Other compatible hosts:** usually `https://your-host/v1` when the path is omitted.
+
+`resolveOpenAiCompatibleBaseUrl()` runs `coerceOpenAiCompatibleBaseUrl()` after normalization so common mistakes don’t 404.
 
 ## Keys and endpoints
 

@@ -4,8 +4,10 @@ import * as SecureStore from "expo-secure-store";
 import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -21,17 +23,23 @@ import { useSession } from "@/ctx/auth-context";
 import { useNativeThemeColors } from "@/hooks/use-native-theme-colors";
 import { useStorageState } from "@/hooks/use-storage-state";
 import {
+  DEFAULT_CHAT_MODEL_ID,
   type ChatMessage,
+  listOpenAiCompatibleChatModels,
   streamChatCompletion,
 } from "@/services/openrouter-chat";
 import { resolveOpenRouterApiKey } from "@/utils/openrouter-env-defaults";
 import {
   GLOBAL_API_KEY_STORAGE_KEY,
   clearGlobalApiKeyStorage,
+  getChatModelIdStorageKey,
   getOpenAiCompatibleBaseUrlStorageKey,
   getOpenRouterApiKeyStorageKey,
 } from "@/utils/openrouter-storage";
-import { getFriendlyChatProviderError } from "@/utils/provider-chat-error";
+import {
+  getFriendlyChatProviderError,
+  logChatProviderError,
+} from "@/utils/provider-chat-error";
 import {
   buildUserPersonalizationSystemMessage,
   getUserProfileStorageKey,
@@ -58,16 +66,26 @@ export default function HomeScreen() {
     () => getUserProfileStorageKey(session),
     [session],
   );
+  const modelStorageKey = useMemo(
+    () => getChatModelIdStorageKey(session),
+    [session],
+  );
   const [[isKeyLoading, storedOpenRouterKey], setOpenRouterKey] =
     useStorageState(storageKey);
   const [[, storedOpenAiBaseUrl], setOpenAiBaseUrl] =
     useStorageState(baseUrlStorageKey);
   const [[, storedProfileJson], setProfileJson] =
     useStorageState(profileStorageKey);
+  const [[, storedChatModelId], setStoredChatModelId] =
+    useStorageState(modelStorageKey);
   const effectiveOpenRouterKey = useMemo(
     () => resolveOpenRouterApiKey(storedOpenRouterKey),
     [storedOpenRouterKey],
   );
+  const effectiveChatModelId = useMemo(() => {
+    const t = storedChatModelId?.trim();
+    return t && t.length > 0 ? t : DEFAULT_CHAT_MODEL_ID;
+  }, [storedChatModelId]);
 
   const [error, setError] = useState<string | null>(null);
   const [isMigratingKey, setIsMigratingKey] = useState(false);
@@ -81,6 +99,27 @@ export default function HomeScreen() {
     useRef<
       FlatList<{ id: string; role: ChatMessage["role"]; content: string }>
     >(null);
+
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [modelSearch, setModelSearch] = useState("");
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [modelsStatus, setModelsStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [modelsErrorMessage, setModelsErrorMessage] = useState<string | null>(
+    null,
+  );
+
+  /** Avoid listing models on every chat mount (extra 429 pressure). Short TTL cache when picker reopens. */
+  const modelsListCacheRef = useRef<{
+    signature: string;
+    fetchedAt: number;
+    ids: string[];
+  } | null>(null);
+
+  useEffect(() => {
+    modelsListCacheRef.current = null;
+  }, [effectiveOpenRouterKey, storedOpenAiBaseUrl]);
 
   const canSend = useMemo(
     () =>
@@ -119,6 +158,89 @@ export default function HomeScreen() {
       setError(null);
     }
   }, [effectiveOpenRouterKey]);
+
+  useEffect(() => {
+    if (!modelPickerOpen) return;
+    if (
+      !effectiveOpenRouterKey.trim() ||
+      isKeyLoading ||
+      isSessionLoading
+    ) {
+      return;
+    }
+
+    const signature = `${effectiveOpenRouterKey}\0${storedOpenAiBaseUrl ?? ""}`;
+    const cache = modelsListCacheRef.current;
+    const staleMs = 120_000;
+    if (
+      cache &&
+      cache.signature === signature &&
+      Date.now() - cache.fetchedAt < staleMs
+    ) {
+      setAvailableModels(cache.ids);
+      setModelsStatus("ready");
+      setModelsErrorMessage(null);
+      return;
+    }
+
+    const ac = new AbortController();
+    let cancelled = false;
+
+    setModelsStatus("loading");
+    setModelsErrorMessage(null);
+
+    (async () => {
+      try {
+        const ids = await listOpenAiCompatibleChatModels({
+          apiKey: effectiveOpenRouterKey,
+          baseURL: storedOpenAiBaseUrl,
+          signal: ac.signal,
+        });
+        if (!cancelled) {
+          modelsListCacheRef.current = {
+            signature,
+            fetchedAt: Date.now(),
+            ids,
+          };
+          setAvailableModels(ids);
+          setModelsStatus("ready");
+        }
+      } catch (e) {
+        if (cancelled) return;
+        if (e instanceof Error && e.name === "AbortError") return;
+        logChatProviderError(e, "models.list");
+        setModelsStatus("error");
+        setModelsErrorMessage(
+          e instanceof Error ? e.message : "Failed to load models.",
+        );
+        setAvailableModels([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
+  }, [
+    modelPickerOpen,
+    effectiveOpenRouterKey,
+    storedOpenAiBaseUrl,
+    isKeyLoading,
+    isSessionLoading,
+  ]);
+
+  const filteredModelIds = useMemo(() => {
+    const q = modelSearch.trim().toLowerCase();
+    let list = [...availableModels];
+    if (
+      effectiveChatModelId &&
+      !list.includes(effectiveChatModelId)
+    ) {
+      list = [effectiveChatModelId, ...list];
+    }
+    if (!q) return list;
+    return list.filter((id) => id.toLowerCase().includes(q));
+  }, [availableModels, modelSearch, effectiveChatModelId]);
 
   useEffect(() => {
     // Migrate global API key -> per-user key once, then remove global storage
@@ -172,23 +294,28 @@ export default function HomeScreen() {
             const keyNext = localStorage.getItem(storageKey);
             const urlNext = localStorage.getItem(baseUrlStorageKey);
             const profileNext = localStorage.getItem(profileStorageKey);
+            const modelNext = localStorage.getItem(modelStorageKey);
             if (isActive) {
               setOpenRouterKey(keyNext);
               setOpenAiBaseUrl(urlNext);
               setProfileJson(profileNext);
+              setStoredChatModelId(modelNext);
             }
             return;
           }
 
-          const [keyNext, urlNext, profileNext] = await Promise.all([
-            SecureStore.getItemAsync(storageKey),
-            SecureStore.getItemAsync(baseUrlStorageKey),
-            SecureStore.getItemAsync(profileStorageKey),
-          ]);
+          const [keyNext, urlNext, profileNext, modelNext] =
+            await Promise.all([
+              SecureStore.getItemAsync(storageKey),
+              SecureStore.getItemAsync(baseUrlStorageKey),
+              SecureStore.getItemAsync(profileStorageKey),
+              SecureStore.getItemAsync(modelStorageKey),
+            ]);
           if (isActive) {
             setOpenRouterKey(keyNext);
             setOpenAiBaseUrl(urlNext);
             setProfileJson(profileNext);
+            setStoredChatModelId(modelNext);
           }
         } catch {
           // Ignore refresh errors; the user can still enter a new key.
@@ -202,10 +329,12 @@ export default function HomeScreen() {
       };
     }, [
       baseUrlStorageKey,
+      modelStorageKey,
       profileStorageKey,
       setOpenAiBaseUrl,
       setOpenRouterKey,
       setProfileJson,
+      setStoredChatModelId,
       storageKey,
     ]),
   );
@@ -317,7 +446,7 @@ export default function HomeScreen() {
         apiKey: effectiveOpenRouterKey,
         baseURL: storedOpenAiBaseUrl,
         messages: history,
-        model: "openrouter/free",
+        model: effectiveChatModelId,
         signal: abortController.signal,
       })) {
         buffer += token;
@@ -378,6 +507,35 @@ export default function HomeScreen() {
     setIsGenerating(false);
   };
 
+  const handleRetryLoadModels = useCallback(() => {
+    if (!effectiveOpenRouterKey.trim()) return;
+    modelsListCacheRef.current = null;
+    setModelsStatus("loading");
+    setModelsErrorMessage(null);
+    void listOpenAiCompatibleChatModels({
+      apiKey: effectiveOpenRouterKey,
+      baseURL: storedOpenAiBaseUrl,
+    })
+      .then((ids) => {
+        const signature = `${effectiveOpenRouterKey}\0${storedOpenAiBaseUrl ?? ""}`;
+        modelsListCacheRef.current = {
+          signature,
+          fetchedAt: Date.now(),
+          ids,
+        };
+        setAvailableModels(ids);
+        setModelsStatus("ready");
+      })
+      .catch((e) => {
+        logChatProviderError(e, "models.list.retry");
+        setModelsStatus("error");
+        setModelsErrorMessage(
+          e instanceof Error ? e.message : "Failed to load models.",
+        );
+        setAvailableModels([]);
+      });
+  }, [effectiveOpenRouterKey, storedOpenAiBaseUrl]);
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -422,6 +580,56 @@ export default function HomeScreen() {
             </View>
           )}
         />
+
+        <View style={styles.modelRowWrap}>
+          <Pressable
+            onPress={() => {
+              setModelSearch("");
+              setModelPickerOpen(true);
+            }}
+            disabled={!effectiveOpenRouterKey.trim()}
+            style={[
+              styles.modelPickerTrigger,
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.surface,
+                opacity: effectiveOpenRouterKey.trim() ? 1 : 0.55,
+              },
+            ]}
+          >
+            <AppText
+              numberOfLines={1}
+              style={[styles.modelPickerLabel, { color: colors.text }]}
+            >
+              {effectiveChatModelId}
+            </AppText>
+            {modelsStatus === "loading" ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <SymbolView
+                name={{
+                  ios: "chevron.down",
+                  android: "expand_more",
+                  web: "expand_more",
+                }}
+                size={16}
+                tintColor={colors.secondaryText}
+              />
+            )}
+          </Pressable>
+          {!effectiveOpenRouterKey.trim() ? (
+            <AppText muted style={styles.modelHint}>
+              Add an API key in Settings → AI settings to load models.
+            </AppText>
+          ) : modelsStatus === "error" && modelsErrorMessage ? (
+            <AppText
+              style={[styles.modelHint, { color: colors.error }]}
+              numberOfLines={2}
+            >
+              {modelsErrorMessage}
+            </AppText>
+          ) : null}
+        </View>
 
         <View
           style={[
@@ -492,6 +700,181 @@ export default function HomeScreen() {
           </Pressable>
         ) : null}
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={modelPickerOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          setModelPickerOpen(false);
+          setModelSearch("");
+        }}
+      >
+        <SafeAreaView
+          style={[styles.modalRoot, { backgroundColor: colors.background }]}
+        >
+          {/* Fixed top: list scrolls only in modalBody below — never paints over search */}
+          <View
+            style={[
+              styles.modalStickyTop,
+              {
+                backgroundColor: colors.background,
+                borderBottomColor: colors.border,
+              },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <AppText style={[styles.modalTitle, { color: colors.text }]}>
+                Select model
+              </AppText>
+              <Pressable
+                onPress={() => {
+                  setModelPickerOpen(false);
+                  setModelSearch("");
+                }}
+                hitSlop={8}
+              >
+                <SymbolView
+                  name={{ ios: "xmark", android: "close", web: "close" }}
+                  size={18}
+                  tintColor={colors.text}
+                />
+              </Pressable>
+            </View>
+
+            <TextInput
+              placeholder="Search models…"
+              placeholderTextColor={colors.placeholder as string}
+              value={modelSearch}
+              onChangeText={setModelSearch}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={[
+                styles.modelSearchInput,
+                {
+                  borderColor: colors.border,
+                  color: colors.text,
+                  backgroundColor: colors.surface,
+                },
+              ]}
+            />
+          </View>
+
+          <View style={styles.modalBody}>
+            {modelsStatus === "loading" ? (
+              <ActivityIndicator
+                style={styles.modalLoading}
+                color={colors.primary}
+              />
+            ) : modelsStatus === "error" ? (
+              <View style={styles.modalErrorBox}>
+                <AppText style={{ color: colors.error }}>
+                  {modelsErrorMessage ?? "Could not load models."}
+                </AppText>
+                <Pressable
+                  onPress={handleRetryLoadModels}
+                  style={styles.modalRetry}
+                >
+                  <AppText style={{ color: colors.primary, fontWeight: "700" }}>
+                    Try again
+                  </AppText>
+                </Pressable>
+              </View>
+            ) : (
+              <FlatList
+                data={filteredModelIds}
+                keyExtractor={(item) => item}
+                keyboardShouldPersistTaps="handled"
+                removeClippedSubviews={false}
+                contentContainerStyle={styles.modalListContent}
+                style={styles.modalModelList}
+                renderItem={({ item }) => {
+                const isSelected = item === effectiveChatModelId;
+                return (
+                  // Padding wrapper: keeps selected border/shadow inside layout bounds so
+                  // FlatList / neighbors don't clip the bottom edge.
+                  <View
+                    style={[
+                      styles.modelListCellWrap,
+                      isSelected && styles.modelListCellWrapSelected,
+                    ]}
+                  >
+                    <Pressable
+                      onPress={() => {
+                        setStoredChatModelId(item);
+                        setModelPickerOpen(false);
+                        setModelSearch("");
+                      }}
+                      style={[
+                        styles.modelListRow,
+                        !isSelected && {
+                          borderBottomColor: colors.border,
+                        },
+                        isSelected && {
+                          marginHorizontal: 8,
+                          paddingVertical: 16,
+                          paddingHorizontal: 14,
+                          borderRadius: 14,
+                          borderWidth: 2,
+                          borderColor: colors.primary,
+                          backgroundColor: colors.surface,
+                          borderBottomWidth: 2,
+                          // Subtle emphasis so it reads even if surface ≈ background
+                          shadowColor: "#000",
+                          shadowOffset: { width: 0, height: 1 },
+                          shadowOpacity: 0.12,
+                          shadowRadius: 3,
+                          elevation: 3,
+                        },
+                      ]}
+                    >
+                      <AppText
+                        style={[
+                          styles.modelListRowText,
+                          {
+                            color: isSelected ? colors.primary : colors.text,
+                            fontWeight: isSelected ? "800" : "500",
+                          },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {item}
+                      </AppText>
+                      {isSelected ? (
+                        <View
+                          style={[
+                            styles.modelSelectedCheckWrap,
+                            { backgroundColor: colors.primary },
+                          ]}
+                        >
+                          <SymbolView
+                            name={{
+                              ios: "checkmark",
+                              android: "check",
+                              web: "check",
+                            }}
+                            size={14}
+                            tintColor="#FFFFFF"
+                            weight="bold"
+                          />
+                        </View>
+                      ) : null}
+                    </Pressable>
+                  </View>
+                );
+              }}
+              ListEmptyComponent={
+                <AppText muted style={styles.modalEmpty}>
+                  {modelSearch.trim()
+                    ? "No models match your search."
+                    : "No models returned from the provider."}
+                </AppText>
+              }
+            />
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -552,6 +935,117 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
+  },
+  modelRowWrap: {
+    paddingHorizontal: 12,
+    paddingBottom: 4,
+    gap: 6,
+  },
+  modelPickerTrigger: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  modelPickerLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  modelHint: {
+    fontSize: 12,
+    fontWeight: "600",
+    paddingHorizontal: 2,
+  },
+  modalRoot: {
+    flex: 1,
+  },
+  /** Title + search: opaque layer above the list so scrolled rows don’t show through. */
+  modalStickyTop: {
+    zIndex: 2,
+    elevation: 6,
+    paddingBottom: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  /** Scrollable list (and loading/error) only occupy space below the search bar. */
+  modalBody: {
+    flex: 1,
+    minHeight: 0,
+    overflow: "hidden",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  modalTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  modelSearchInput: {
+    marginHorizontal: 12,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    fontSize: 16,
+  },
+  modalLoading: {
+    marginTop: 24,
+  },
+  modalErrorBox: {
+    padding: 16,
+    gap: 12,
+  },
+  modalRetry: {
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+  },
+  modalListContent: {
+    paddingBottom: 32,
+    paddingTop: 4,
+  },
+  modalModelList: {
+    flex: 1,
+  },
+  modelListCellWrap: {
+    overflow: "visible",
+  },
+  /** Vertical inset so the selected card’s bottom border isn’t flush with the next row. */
+  modelListCellWrapSelected: {
+    paddingVertical: 8,
+  },
+  modelListRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  modelListRowText: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  modelSelectedCheckWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalEmpty: {
+    padding: 20,
+    textAlign: "center",
   },
 });
 

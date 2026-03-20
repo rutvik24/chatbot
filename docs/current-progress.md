@@ -53,7 +53,7 @@ Implemented:
 Based on the current code:
 
 - No conversation history persistence yet (messages are kept in component state only)
-- No UI for selecting the model name (chat uses a hardcoded model id: `openrouter/free`)
+- Chat includes a model picker (OpenAI SDK `models.list` when opened, cached; default free model id in `openrouter-chat.ts`)
 - Forgot password is mocked and needs real backend integration
 - Auth is local-only; production needs a real auth provider and secure credential handling
 

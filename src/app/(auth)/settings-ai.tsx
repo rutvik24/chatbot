@@ -16,6 +16,7 @@ import { useNativeThemeColors } from "@/hooks/use-native-theme-colors";
 import { useStorageState } from "@/hooks/use-storage-state";
 import {
   DEFAULT_OPENAI_COMPAT_BASE_URL,
+  coerceOpenAiCompatibleBaseUrl,
   normalizeOpenAiCompatibleBaseUrl,
 } from "@/services/openrouter-chat";
 import { hasEnvDefaultOpenRouterApiKey } from "@/utils/openrouter-env-defaults";
@@ -125,14 +126,15 @@ export default function SettingsAiScreen() {
     }
     try {
       const normalized = normalizeOpenAiCompatibleBaseUrl(baseUrlInput);
-      if (normalized === DEFAULT_OPENAI_COMPAT_BASE_URL) {
+      const coerced = coerceOpenAiCompatibleBaseUrl(normalized);
+      if (coerced === DEFAULT_OPENAI_COMPAT_BASE_URL) {
         setStoredBaseUrl(null);
         setBaseUrlInput(DEFAULT_OPENAI_COMPAT_BASE_URL);
         setMessage("Using default OpenRouter base URL.");
         return;
       }
-      setStoredBaseUrl(normalized);
-      setBaseUrlInput(normalized);
+      setStoredBaseUrl(coerced);
+      setBaseUrlInput(coerced);
       setMessage("Base URL saved.");
     } catch {
       setMessage("Enter a valid URL (https://…), e.g. OpenRouter or a proxy.");
@@ -162,7 +164,7 @@ export default function SettingsAiScreen() {
           <AppText muted>
             {isKeyLoading || isBaseUrlLoading
               ? "Loading settings..."
-              : "API key and base URL are stored locally using secure storage on native. If no key is saved, the app can use EXPO_PUBLIC_OPENROUTER_API_KEY (or EXPO_PUBLIC_OPENAI_API_KEY) from your env at build time."}
+              : "API key and base URL are stored locally using secure storage on native. If no key is saved here, a default key from your app’s build configuration may be used (see project docs)."}
           </AppText>
 
           <AppTextInput
@@ -177,9 +179,9 @@ export default function SettingsAiScreen() {
             onSubmitEditing={saveBaseUrl}
           />
           <AppText muted style={styles.hint}>
-            Default is OpenRouter. Use another host for a custom gateway or
-            OpenAI-compatible API. The chat screen still uses the model id
-            openrouter/free—other hosts may need a different model in code.
+            If you only enter a host (e.g. openrouter.ai), the app adds the right
+            path: OpenRouter → /api/v1, most other APIs → /v1. Pick the model in
+            Chat. Wrong base URLs often return “not found” (404).
           </AppText>
           <View style={styles.buttonRow}>
             <AppButton
@@ -208,8 +210,8 @@ export default function SettingsAiScreen() {
           !storedOpenRouterKey?.trim() &&
           hasEnvDefaultOpenRouterApiKey() ? (
             <AppText muted style={styles.hint}>
-              No key saved for this account. Chat will use the default API key
-              from your Expo public env until you save one here.
+              No key saved for this account. Chat may use a default key from
+              your build until you save one here.
             </AppText>
           ) : null}
 

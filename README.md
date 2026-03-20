@@ -28,7 +28,7 @@ Known demo limitations to address next:
 - Auth is a mock (no real backend). Passwords and sessions are stored locally.
 - Forgot password is mocked (no email is sent).
 - Chat messages are currently kept in-memory (no conversation history persistence).
-- Model selection is not exposed in UI yet (model is hardcoded to `openrouter/free` in the chat service).
+- Model picker loads models via the OpenAI SDK when you open it (cached ~2 min); default model avoids the shared `openrouter/free` pool (see `DEFAULT_CHAT_MODEL_ID` in `openrouter-chat.ts`).
 
 ## Quick Start
 
