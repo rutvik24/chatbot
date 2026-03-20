@@ -41,6 +41,12 @@ import {
   logChatProviderError,
 } from "@/utils/provider-chat-error";
 import {
+  buildChatTimelineRows,
+  formatMessageTime,
+  type ChatMessageWithTime,
+  type ChatTimelineRow,
+} from "@/utils/chat-timeline";
+import {
   buildUserPersonalizationSystemMessage,
   getUserProfileStorageKey,
 } from "@/utils/user-profile-chat";
@@ -51,9 +57,7 @@ export default function HomeScreen() {
   const { session, isLoading: isSessionLoading } = useSession();
   const colors = useNativeThemeColors();
   const [text, setText] = useState("");
-  const [messages, setMessages] = useState<
-    { id: string; role: ChatMessage["role"]; content: string }[]
-  >([]);
+  const [messages, setMessages] = useState<ChatMessageWithTime[]>([]);
   const storageKey = useMemo(
     () => getOpenRouterApiKeyStorageKey(session),
     [session],
@@ -95,10 +99,12 @@ export default function HomeScreen() {
   const isAtBottomRef = useRef(true);
   const composerInputRef = useRef<TextInput>(null);
   const generationRunIdRef = useRef(0);
-  const listRef =
-    useRef<
-      FlatList<{ id: string; role: ChatMessage["role"]; content: string }>
-    >(null);
+  const chatTimelineRows = useMemo(
+    () => buildChatTimelineRows(messages),
+    [messages],
+  );
+
+  const listRef = useRef<FlatList<ChatTimelineRow>>(null);
 
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
@@ -141,7 +147,7 @@ export default function HomeScreen() {
     if (!listRef.current) return;
     if (!shouldAutoScrollRef.current) return;
     listRef.current.scrollToEnd({ animated: true });
-  }, [messages.length]);
+  }, [chatTimelineRows.length]);
 
   const handleScroll = (event: any) => {
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
@@ -392,15 +398,18 @@ export default function HomeScreen() {
     const userMessageId = makeId();
     const assistantMessageId = makeId();
 
-    const userMsg = {
+    const sentAt = Date.now();
+    const userMsg: ChatMessageWithTime = {
       id: userMessageId,
-      role: "user" as const,
+      role: "user",
       content: value,
+      createdAt: sentAt,
     };
-    const assistantMsg = {
+    const assistantMsg: ChatMessageWithTime = {
       id: assistantMessageId,
-      role: "assistant" as const,
+      role: "assistant",
       content: "",
+      createdAt: sentAt,
     };
 
     setMessages((previous) => [...previous, userMsg, assistantMsg]);
@@ -547,7 +556,7 @@ export default function HomeScreen() {
       >
         <FlatList
           ref={listRef}
-          data={messages}
+          data={chatTimelineRows}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messagesContent}
           keyboardShouldPersistTaps="handled"
@@ -557,28 +566,81 @@ export default function HomeScreen() {
             // User started interacting; stop forcing scroll until they return to bottom.
             shouldAutoScrollRef.current = false;
           }}
-          renderItem={({ item }) => (
-            <View
-              style={[
-                styles.messageBubble,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  alignSelf: item.role === "user" ? "flex-end" : "flex-start",
-                  borderTopLeftRadius: item.role === "user" ? 16 : 2,
-                  borderTopRightRadius: item.role === "user" ? 2 : 16,
-                  borderBottomLeftRadius: 16,
-                  borderBottomRightRadius: 16,
-                },
-              ]}
-            >
-              <MarkdownMessage
-                markdown={
-                  item.content || (item.role === "assistant" ? "..." : "")
-                }
-              />
-            </View>
-          )}
+          renderItem={({ item }) =>
+            item.kind === "day" ? (
+              <View style={styles.daySection}>
+                <View
+                  style={[
+                    styles.daySectionLine,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.dayPill,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <AppText
+                    muted
+                    style={[styles.daySectionLabel, { color: colors.secondaryText }]}
+                  >
+                    {item.label}
+                  </AppText>
+                </View>
+                <View
+                  style={[
+                    styles.daySectionLine,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
+              </View>
+            ) : (
+              <View
+                style={[
+                  styles.messageColumn,
+                  item.role === "user"
+                    ? { alignSelf: "flex-end" }
+                    : { alignSelf: "flex-start" },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.messageBubble,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      borderTopLeftRadius: item.role === "user" ? 16 : 2,
+                      borderTopRightRadius: item.role === "user" ? 2 : 16,
+                      borderBottomLeftRadius: 16,
+                      borderBottomRightRadius: 16,
+                    },
+                  ]}
+                >
+                  <MarkdownMessage
+                    markdown={
+                      item.content || (item.role === "assistant" ? "..." : "")
+                    }
+                  />
+                </View>
+                <AppText
+                  muted
+                  style={[
+                    styles.messageTime,
+                    {
+                      color: colors.secondaryText,
+                      textAlign: item.role === "user" ? "right" : "left",
+                    },
+                  ]}
+                >
+                  {formatMessageTime(item.createdAt)}
+                </AppText>
+              </View>
+            )
+          }
         />
 
         <View style={styles.modelRowWrap}>
@@ -892,11 +954,44 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     gap: 8,
   },
+  daySection: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    width: "100%",
+    gap: 10,
+  },
+  daySectionLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    opacity: 0.85,
+  },
+  dayPill: {
+    flexShrink: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    maxWidth: "72%",
+  },
+  daySectionLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  messageColumn: {
+    maxWidth: "85%",
+    gap: 4,
+  },
   messageBubble: {
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    maxWidth: "85%",
+  },
+  messageTime: {
+    fontSize: 11,
+    fontWeight: "500",
+    paddingHorizontal: 4,
   },
   errorText: {
     paddingHorizontal: 16,
