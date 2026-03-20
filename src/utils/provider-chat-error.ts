@@ -69,6 +69,18 @@ function friendlyFromRawMessage(raw: string): string | undefined {
   ) {
     return 'The request was cancelled.';
   }
+  // Some OpenAI-compatible providers surface cancellation as:
+  // "stream was reset: CANCEL" / "reset: CANCEL" / "request cancelled"
+  if (
+    lower.includes('cancel') &&
+    (lower.includes('stream') ||
+      lower.includes('reset') ||
+      lower.includes('request') ||
+      lower.includes('user') ||
+      lower.includes('abort'))
+  ) {
+    return 'The request was cancelled.';
+  }
   if (
     lower.includes('network request failed') ||
     lower.includes('failed to fetch') ||

@@ -341,16 +341,16 @@ export default function HomeScreen() {
       if (isCancelled) {
         if (!isActiveRun) return;
 
-        // "Stop" should undo the send so the user can quickly edit their last message.
-        // Remove both the in-flight assistant message and the user message that triggered it,
-        // then restore the user's text into the composer.
-        setMessages((previous) =>
-          previous.filter(
-            (m) => m.id !== assistantMessageId && m.id !== userMessageId,
-          ),
-        );
-        setText(value);
+        // Keep already-streamed assistant content.
+        // Also flush any remaining buffer so the last chunk isn't lost.
+        if (buffer) {
+          appendAssistantToken(assistantMessageId, buffer);
+          buffer = "";
+        }
+
         setError(null);
+        // Restore the composer text so the user can edit/resend quickly.
+        setText(value);
         requestAnimationFrame(() => {
           composerInputRef.current?.focus();
         });
@@ -360,7 +360,7 @@ export default function HomeScreen() {
       setMessages((previous) =>
         previous.map((m) =>
           m.id === assistantMessageId
-            ? { ...m, content: `\n\n${friendly}` }
+            ? { ...m, content: `${m.content ?? ""}${m.content ? "\n\n" : ""}${friendly}` }
             : m,
         ),
       );
