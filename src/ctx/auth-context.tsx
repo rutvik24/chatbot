@@ -157,6 +157,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     return { ok: true };
   };
 
+  /** Clears in-memory session only. Per-account SecureStore data (chat history, API keys, etc.) stays on device for the next sign-in. */
   const signOut = () => {
     setSession(null);
   };

@@ -1,13 +1,13 @@
-import { DrawerActions, useNavigation } from '@react-navigation/native';
-import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
+import { DrawerActions, useNavigation } from "@react-navigation/native";
+import { router } from "expo-router";
+import { SymbolView } from "expo-symbols";
 import {
   useCallback,
   useMemo,
   useState,
   type ComponentProps,
   type ReactNode,
-} from 'react';
+} from "react";
 import {
   Modal,
   Platform,
@@ -16,16 +16,19 @@ import {
   StyleSheet,
   View,
   useColorScheme,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { AppText } from '@/components/common';
-import { TabScreenHeader } from '@/components/tab-screen-header';
-import type { ThemePreference } from '@/constants/theme-preference';
-import { useSession } from '@/ctx/auth-context';
-import { useThemePreference } from '@/ctx/theme-preference-context';
-import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
-import { displayEmailFromSession } from '@/utils/session-email';
+import { AppText } from "@/components/common";
+import { TabScreenHeader } from "@/components/tab-screen-header";
+import type { ThemePreference } from "@/constants/theme-preference";
+import { useSession } from "@/ctx/auth-context";
+import { useThemePreference } from "@/ctx/theme-preference-context";
+import { useNativeThemeColors } from "@/hooks/use-native-theme-colors";
+import { useStorageState } from "@/hooks/use-storage-state";
+import type { ChatLaunchPreference } from "@/utils/chat-launch-preference";
+import { getChatLaunchPreferenceStorageKey } from "@/utils/chat-launch-preference";
+import { displayEmailFromSession } from "@/utils/session-email";
 
 type SettingsLinkIcon = {
   ios: string;
@@ -36,7 +39,7 @@ type SettingsLinkIcon = {
 type SettingsLink = {
   label: string;
   description: string;
-  href: '/settings-profile' | '/settings-ai' | '/change-password';
+  href: "/settings-profile" | "/settings-ai" | "/change-password";
   icon: SettingsLinkIcon;
 };
 
@@ -47,26 +50,54 @@ const THEME_OPTIONS: {
   icon: { ios: string; android: string; web: string };
 }[] = [
   {
-    value: 'system',
-    label: 'System',
-    hint: 'Match device',
+    value: "system",
+    label: "System",
+    hint: "Match device",
     icon: {
-      ios: 'circle.lefthalf.filled',
-      android: 'brightness_auto',
-      web: 'brightness_auto',
+      ios: "circle.lefthalf.filled",
+      android: "brightness_auto",
+      web: "brightness_auto",
     },
   },
   {
-    value: 'light',
-    label: 'Light',
-    hint: 'Always light',
-    icon: { ios: 'sun.max.fill', android: 'light_mode', web: 'light_mode' },
+    value: "light",
+    label: "Light",
+    hint: "Always light",
+    icon: { ios: "sun.max.fill", android: "light_mode", web: "light_mode" },
   },
   {
-    value: 'dark',
-    label: 'Dark',
-    hint: 'Always dark',
-    icon: { ios: 'moon.stars.fill', android: 'dark_mode', web: 'dark_mode' },
+    value: "dark",
+    label: "Dark",
+    hint: "Always dark",
+    icon: { ios: "moon.stars.fill", android: "dark_mode", web: "dark_mode" },
+  },
+];
+
+const CHAT_LAUNCH_OPTIONS: {
+  value: ChatLaunchPreference;
+  label: string;
+  hint: string;
+  icon: { ios: string; android: string; web: string };
+}[] = [
+  {
+    value: "resume_recent",
+    label: "Recent chat",
+    hint: "Restore last conversation",
+    icon: {
+      ios: "clock.arrow.circlepath",
+      android: "history",
+      web: "history",
+    },
+  },
+  {
+    value: "start_fresh",
+    label: "New chat",
+    hint: "Empty composer on open",
+    icon: {
+      ios: "square.and.pencil",
+      android: "edit_square",
+      web: "edit_square",
+    },
   },
 ];
 
@@ -117,14 +148,14 @@ function SettingsCard({
           borderColor: colors.border,
           ...Platform.select({
             ios: {
-              shadowColor: '#000',
+              shadowColor: "#000",
               shadowOffset: { width: 0, height: 4 },
               shadowOpacity: 0.06,
               shadowRadius: 14,
             },
             android: { elevation: 2 },
             default: {
-              shadowColor: '#000',
+              shadowColor: "#000",
               shadowOffset: { width: 0, height: 2 },
               shadowOpacity: 0.05,
               shadowRadius: 8,
@@ -159,7 +190,7 @@ function SettingsLinkRow({
         {
           borderBottomColor: colors.border,
           borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
-          backgroundColor: pressed ? colors.background : 'transparent',
+          backgroundColor: pressed ? colors.background : "transparent",
         },
       ]}
     >
@@ -170,7 +201,7 @@ function SettingsLinkRow({
         ]}
       >
         <SymbolView
-          name={item.icon as ComponentProps<typeof SymbolView>['name']}
+          name={item.icon as ComponentProps<typeof SymbolView>["name"]}
           size={22}
           tintColor={colors.primary}
         />
@@ -185,9 +216,9 @@ function SettingsLinkRow({
       </View>
       <SymbolView
         name={{
-          ios: 'chevron.right',
-          android: 'chevron_right',
-          web: 'chevron_right',
+          ios: "chevron.right",
+          android: "chevron_right",
+          web: "chevron_right",
         }}
         size={14}
         tintColor={colors.secondaryText}
@@ -205,29 +236,37 @@ export default function SettingsScreen() {
   }, [navigation]);
   const { preference, setPreference } = useThemePreference();
   const { session, signOut } = useSession();
+  const chatLaunchStorageKey = useMemo(
+    () => getChatLaunchPreferenceStorageKey(session),
+    [session],
+  );
+  const [[, storedChatLaunchPref], setChatLaunchPref] =
+    useStorageState(chatLaunchStorageKey);
+  const chatLaunchEffective: ChatLaunchPreference =
+    storedChatLaunchPref === "start_fresh" ? "start_fresh" : "resume_recent";
   const [isSignOutModalVisible, setIsSignOutModalVisible] = useState(false);
   const [shouldTestBoundary, setShouldTestBoundary] = useState(false);
 
   const accountLinks: SettingsLink[] = useMemo(
     () => [
       {
-        label: 'Profile',
-        description: 'Name & details used to personalize replies',
-        href: '/settings-profile',
+        label: "Profile",
+        description: "Name & details used to personalize replies",
+        href: "/settings-profile",
         icon: {
-          ios: 'person.crop.circle.fill',
-          android: 'account_circle',
-          web: 'account_circle',
+          ios: "person.crop.circle.fill",
+          android: "account_circle",
+          web: "account_circle",
         },
       },
       {
-        label: 'AI settings',
-        description: 'API key, model, and provider connection',
-        href: '/settings-ai',
+        label: "AI settings",
+        description: "API key, model, and provider connection",
+        href: "/settings-ai",
         icon: {
-          ios: 'sparkles',
-          android: 'auto_awesome',
-          web: 'auto_awesome',
+          ios: "sparkles",
+          android: "auto_awesome",
+          web: "auto_awesome",
         },
       },
     ],
@@ -237,13 +276,13 @@ export default function SettingsScreen() {
   const securityLinks: SettingsLink[] = useMemo(
     () => [
       {
-        label: 'Change password',
-        description: 'Update your account password',
-        href: '/change-password',
+        label: "Change password",
+        description: "Update your account password",
+        href: "/change-password",
         icon: {
-          ios: 'key.fill',
-          android: 'vpn_key',
-          web: 'vpn_key',
+          ios: "key.fill",
+          android: "vpn_key",
+          web: "vpn_key",
         },
       },
     ],
@@ -251,11 +290,11 @@ export default function SettingsScreen() {
   );
 
   const emailDisplay =
-    displayEmailFromSession(session).trim() || 'Your account';
+    displayEmailFromSession(session).trim() || "Your account";
   const avatarLetter = emailDisplay.charAt(0).toUpperCase();
 
   if (shouldTestBoundary) {
-    throw new Error('Test ErrorBoundary');
+    throw new Error("Test ErrorBoundary");
   }
 
   return (
@@ -271,7 +310,7 @@ export default function SettingsScreen() {
       >
         {/* Profile hero */}
         <Pressable
-          onPress={() => router.push('/settings-profile')}
+          onPress={() => router.push("/settings-profile")}
           accessibilityRole="button"
           accessibilityLabel="Open profile settings"
           style={({ pressed }) => [
@@ -312,9 +351,9 @@ export default function SettingsScreen() {
                   </AppText>
                   <SymbolView
                     name={{
-                      ios: 'chevron.right',
-                      android: 'chevron_right',
-                      web: 'chevron_right',
+                      ios: "chevron.right",
+                      android: "chevron_right",
+                      web: "chevron_right",
                     }}
                     size={12}
                     tintColor={colors.primary}
@@ -347,19 +386,19 @@ export default function SettingsScreen() {
                       borderWidth: selected ? 2 : StyleSheet.hairlineWidth * 2,
                       backgroundColor: colors.surface,
                       opacity: pressed ? 0.88 : 1,
-                      overflow: 'hidden' as const,
+                      overflow: "hidden" as const,
                     };
                     const iosShadow =
-                      Platform.OS === 'ios' && selected
+                      Platform.OS === "ios" && selected
                         ? {
-                            shadowColor: '#000',
+                            shadowColor: "#000",
                             shadowOffset: { width: 0, height: 2 },
                             shadowOpacity: 0.08,
                             shadowRadius: 10,
                           }
                         : {};
                     const androidElev =
-                      Platform.OS === 'android'
+                      Platform.OS === "android"
                         ? { elevation: selected ? 2 : 0 }
                         : {};
                     return [styles.themeChip, base, iosShadow, androidElev];
@@ -369,15 +408,13 @@ export default function SettingsScreen() {
                     <View
                       pointerEvents="none"
                       style={[
-                        StyleSheet.absoluteFillObject,
+                        StyleSheet.absoluteFill,
                         { backgroundColor: colors.primary, opacity: 0.1 },
                       ]}
                     />
                   ) : null}
                   <SymbolView
-                    name={
-                      opt.icon as ComponentProps<typeof SymbolView>['name']
-                    }
+                    name={opt.icon as ComponentProps<typeof SymbolView>["name"]}
                     size={24}
                     tintColor={selected ? colors.primary : colors.secondaryText}
                   />
@@ -389,17 +426,88 @@ export default function SettingsScreen() {
                   >
                     {opt.label}
                   </AppText>
-                  <AppText
-                    muted
-                    style={styles.themeChipHint}
-                    numberOfLines={1}
-                  >
+                  <AppText muted style={styles.themeChipHint} numberOfLines={1}>
                     {opt.hint}
                   </AppText>
                 </Pressable>
               );
             })}
           </View>
+        </SettingsSection>
+
+        {/* Chat launch */}
+        <SettingsSection
+          title="Chat"
+          subtitle="When you sign in or open the app, choose what Chat shows first. Stored per account in SecureStore (iOS/Android) or browser storage (web)."
+          colors={colors}
+        >
+          <View style={styles.themeChipRow}>
+            {CHAT_LAUNCH_OPTIONS.map((opt) => {
+              const selected = chatLaunchEffective === opt.value;
+              return (
+                <Pressable
+                  key={opt.value}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`${opt.label}. ${opt.hint}`}
+                  onPress={() => setChatLaunchPref(opt.value)}
+                  style={({ pressed }) => {
+                    const base = {
+                      borderColor: selected ? colors.primary : colors.border,
+                      borderWidth: selected ? 2 : StyleSheet.hairlineWidth * 2,
+                      backgroundColor: colors.surface,
+                      opacity: pressed ? 0.88 : 1,
+                      overflow: "hidden" as const,
+                    };
+                    const iosShadow =
+                      Platform.OS === "ios" && selected
+                        ? {
+                            shadowColor: "#000",
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.08,
+                            shadowRadius: 10,
+                          }
+                        : {};
+                    const androidElev =
+                      Platform.OS === "android"
+                        ? { elevation: selected ? 2 : 0 }
+                        : {};
+                    return [styles.themeChip, base, iosShadow, androidElev];
+                  }}
+                >
+                  {selected ? (
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        StyleSheet.absoluteFill,
+                        { backgroundColor: colors.primary, opacity: 0.1 },
+                      ]}
+                    />
+                  ) : null}
+                  <SymbolView
+                    name={opt.icon as ComponentProps<typeof SymbolView>["name"]}
+                    size={24}
+                    tintColor={selected ? colors.primary : colors.secondaryText}
+                  />
+                  <AppText
+                    style={[
+                      styles.themeChipLabel,
+                      { color: selected ? colors.primary : colors.text },
+                    ]}
+                  >
+                    {opt.label}
+                  </AppText>
+                  <AppText muted style={styles.themeChipHint} numberOfLines={2}>
+                    {opt.hint}
+                  </AppText>
+                </Pressable>
+              );
+            })}
+          </View>
+          <AppText muted style={styles.chatLaunchFootnote}>
+            Applies the next time your session loads (e.g. after sign-in or
+            restarting the app).
+          </AppText>
         </SettingsSection>
 
         {/* Account */}
@@ -450,16 +558,16 @@ export default function SettingsScreen() {
               styles.signOutButton,
               {
                 borderColor: colors.error,
-                backgroundColor: 'transparent',
+                backgroundColor: "transparent",
                 opacity: pressed ? 0.85 : 1,
               },
             ]}
           >
             <SymbolView
               name={{
-                ios: 'rectangle.portrait.and.arrow.right',
-                android: 'logout',
-                web: 'logout',
+                ios: "rectangle.portrait.and.arrow.right",
+                android: "logout",
+                web: "logout",
               }}
               size={20}
               tintColor={colors.error}
@@ -524,9 +632,9 @@ export default function SettingsScreen() {
             >
               <SymbolView
                 name={{
-                  ios: 'rectangle.portrait.and.arrow.right',
-                  android: 'logout',
-                  web: 'logout',
+                  ios: "rectangle.portrait.and.arrow.right",
+                  android: "logout",
+                  web: "logout",
                 }}
                 size={28}
                 tintColor={colors.error}
@@ -552,7 +660,7 @@ export default function SettingsScreen() {
                   },
                 ]}
               >
-                <AppText style={{ color: colors.text, fontWeight: '600' }}>
+                <AppText style={{ color: colors.text, fontWeight: "600" }}>
                   Cancel
                 </AppText>
               </Pressable>
@@ -569,7 +677,9 @@ export default function SettingsScreen() {
                   },
                 ]}
               >
-                <AppText style={styles.modalButtonPrimaryText}>Sign out</AppText>
+                <AppText style={styles.modalButtonPrimaryText}>
+                  Sign out
+                </AppText>
               </Pressable>
             </View>
           </Pressable>
@@ -598,11 +708,11 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   heroInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 16,
     padding: 20,
   },
@@ -610,13 +720,13 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   avatarLetter: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 26,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   heroText: {
     flex: 1,
@@ -625,23 +735,23 @@ const styles = StyleSheet.create({
   },
   heroGreeting: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
     letterSpacing: 0.2,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   heroEmail: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   heroHintRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
     marginTop: 4,
   },
   heroHint: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   section: {
     gap: 12,
@@ -652,16 +762,16 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: -0.3,
   },
   sectionSubtitle: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
     lineHeight: 20,
   },
   themeChipRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 10,
   },
   themeChip: {
@@ -671,21 +781,28 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     paddingVertical: 14,
     paddingHorizontal: 8,
-    alignItems: 'center',
+    alignItems: "center",
     gap: 6,
   },
   themeChipLabel: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   themeChipHint: {
     fontSize: 10,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  chatLaunchFootnote: {
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 17,
+    paddingHorizontal: 4,
+    marginTop: 4,
   },
   linkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 14,
     paddingVertical: 14,
     paddingHorizontal: 16,
@@ -695,8 +812,8 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   linkTextCol: {
     flex: 1,
@@ -705,11 +822,11 @@ const styles = StyleSheet.create({
   },
   linkTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   linkDescription: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: "500",
     lineHeight: 18,
   },
   signOutSection: {
@@ -717,9 +834,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   signOutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 10,
     minHeight: 54,
     borderRadius: 16,
@@ -727,31 +844,31 @@ const styles = StyleSheet.create({
   },
   signOutLabel: {
     fontSize: 17,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   signOutCaption: {
     fontSize: 13,
     lineHeight: 18,
-    textAlign: 'center',
+    textAlign: "center",
     paddingHorizontal: 8,
   },
   devRow: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 8,
   },
   devText: {
     fontSize: 12,
-    textDecorationLine: 'underline',
+    textDecorationLine: "underline",
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
     padding: 24,
   },
   modalCard: {
-    width: '100%',
+    width: "100%",
     maxWidth: 340,
     borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
@@ -759,7 +876,7 @@ const styles = StyleSheet.create({
     gap: 14,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 12 },
         shadowOpacity: 0.25,
         shadowRadius: 24,
@@ -772,24 +889,24 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    alignSelf: 'center',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 4,
   },
   modalTitle: {
     fontSize: 22,
-    fontWeight: '800',
-    textAlign: 'center',
+    fontWeight: "800",
+    textAlign: "center",
     letterSpacing: -0.4,
   },
   modalBody: {
     fontSize: 15,
     lineHeight: 22,
-    textAlign: 'center',
+    textAlign: "center",
   },
   modalActions: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
     marginTop: 8,
   },
@@ -798,19 +915,20 @@ const styles = StyleSheet.create({
     minHeight: 50,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalButtonPrimary: {
     flex: 1,
     minHeight: 50,
     borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   modalButtonPrimaryText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
+    color: "#FFFFFF",
+    fontWeight: "800",
     fontSize: 16,
   },
 });
+

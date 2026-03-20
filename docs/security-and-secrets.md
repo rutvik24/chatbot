@@ -27,6 +27,19 @@ The app migrates it to per-account storage and then clears the global slot after
 
 This prevents a “cleared key gets repopulated” effect.
 
+## Chat history (SecureStore / localStorage)
+
+Conversation backups are stored **only on the device**, scoped per signed-in account:
+
+- **Native (iOS / Android):** The full history JSON is stored in a single **expo-secure-store** entry (Keychain / EncryptedSharedPreferences). No separate files or JS crypto layer.
+- **Web:** Same key id in **localStorage** (weaker than the OS keychain).
+
+Very large histories may hit platform size limits; the app retries saves after dropping older threads (keeping the active one when possible). See `src/services/chat-history-storage.ts`.
+
+History keys use the same per-account suffix as API keys (`src/utils/session-account-storage.ts`). **Signing out does not erase** chat history or other SecureStore slots — the same email after sign-in reads the same keys again.
+
+**Chat launch preference** (`resume_recent` vs `start_fresh`) uses the same SecureStore / localStorage pattern as other per-account prefs; key helper: `src/utils/chat-launch-preference.ts`.
+
 ## Theme preference (not a secret)
 
 Appearance choice (system / light / dark) is stored with the same storage helper as other prefs but is **not** sensitive. Key: `app_theme_preference_v1` (see `src/constants/theme-preference.ts`).

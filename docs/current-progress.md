@@ -20,7 +20,7 @@ Main routes:
 
 | Route | Purpose |
 |--------|---------|
-| `/(main)/(tabs)/index` | Chat: **`TabScreenHeader`** “Chat”; streaming, composer, model picker strip, scroll / catch-up UX; **New chat** in drawer |
+| `/(main)/(tabs)/index` | Chat: **`TabScreenHeader`** “Chat”; streaming, composer, model picker strip, scroll / catch-up UX; **New chat** + **History** (encrypted local threads) in drawer |
 | `/(main)/(tabs)/settings` | **`TabScreenHeader`** “Settings”; Profile & AI links, **Appearance**, sign out, error-boundary test; **☰** opens same drawer (**New chat**) |
 | `/(auth)/settings-ai` | **AI connection** hero, **Provider URL** + **API key** sections with info callouts, carded fields, stacked actions, success/error feedback |
 | `/(auth)/settings-profile` | **Your profile** hero (avatar + email), personalization copy, carded name fields, save + success banner |
@@ -38,6 +38,7 @@ Auth/settings scroll screens use **`SafeAreaView` `edges={['bottom','left','righ
 
 ## Chat (`/(main)/(tabs)/index`)
 
+- **Launch** — After `session` loads, reads `getChatLaunchPreference(session)`: **`start_fresh`** starts an empty thread and updates stored active id; **`resume_recent`** (default) restores the last active thread from chat history storage when present.
 - **Streaming** — OpenAI-compatible `stream: true`; tokens batched ~40ms before UI append for performance.
 - **Stop** — `AbortController`; cancellation is not shown as an error in the bubble.
   - **No assistant output yet** — last user message + empty assistant row removed; same text restored to the composer (edit/resend).
@@ -46,12 +47,13 @@ Auth/settings scroll screens use **`SafeAreaView` `edges={['bottom','left','righ
 - **Scroll** — `shouldAutoScrollRef` + **stick-to-bottom** after send or **Catch up**; `onContentSizeChange` + scheduled `scrollToEnd` while following; wider cancel threshold while generating so layout jitter doesn’t drop follow mode.
 - **Catch up / Latest** — Floating button above the composer when not at bottom; **Catch up** variant while generating; docked with elevation so it stays visible on Android.
 - **UI** — **`TabScreenHeader`** with optional **subtitle** (Chat: “Streaming · Private on device”); **empty state** (icon orb + welcome copy) when there are no messages; refined **bubbles** (softer tail radii, lighter shadows, `overflow: hidden`); **thinking** row with spinner; **error banner** card + **Open AI settings** CTA when the key is missing; **composer** (larger radii/shadow, 46px send, refreshed placeholder); **model sheet** (Models title + subtitle, search field, filled close); **Catch up / Latest** pill spacing.
-- **New chat** (drawer) — Aborts stream, clears messages/composer/error, closes model picker, resets scroll to top; navigates to Chat tab; if Chat isn’t mounted, reset runs when the screen registers (**`ChatActionsProvider`** pending flag).
+- **New chat** (drawer) — Saves the current thread to encrypted local storage, then starts a fresh session id; same abort/reset behavior as before; **`ChatActionsProvider`** pending flag if Chat isn’t mounted.
+- **Chat history** (drawer → **History**) — Threads are stored as JSON in **SecureStore** on native (single entry per account) and **localStorage** on web. Keyed by **`getSessionAccountStorageSuffix(session)`** (same normalized-email slug as API keys). **Sign-out does not delete history** — signing in again with the same account restores it. Up to **80** threads; delete per row (trash). See `src/services/chat-history-storage.ts`, `src/utils/session-account-storage.ts`, `src/ctx/chat-history-context.tsx`.
 
 ## Settings (`/(main)/(tabs)/settings`)
 
 - **`TabScreenHeader`** — “Settings” + ☰ (drawer).
-- **`ScrollView`** — profile **hero card** (avatar initial, signed-in email, tap → Profile); **Appearance** as three **chips** (System / Light / Dark) with icons; **Account** and **Security** grouped cards with icon rows, titles, short descriptions, and chevrons; outlined **Sign out** + helper copy; **sign-out modal** with icon, clearer title/body, Cancel / Sign out.
+- **`ScrollView`** — profile **hero card** (avatar initial, signed-in email, tap → Profile); **Appearance** as three **chips** (System / Light / Dark) with icons; **Chat** chips (**Recent chat** vs **New chat**) for launch behavior after sign-in / app start — per-account key via `getChatLaunchPreferenceStorageKey` + `useStorageState` (SecureStore on native, `localStorage` on web); **Account** and **Security** grouped cards with icon rows, titles, short descriptions, and chevrons; outlined **Sign out** + helper copy; **sign-out modal** with icon, clearer title/body, Cancel / Sign out.
 - **`__DEV__`** — ErrorBoundary test is a small footer link (not a primary row).
 
 ## Prompt / history
@@ -66,12 +68,12 @@ Auth/settings scroll screens use **`SafeAreaView` `edges={['bottom','left','righ
 
 ## Settings & storage
 
+- **Chat history** (SecureStore on native): `src/services/chat-history-storage.ts` + `ChatHistoryProvider` in `src/app/(main)/_layout.tsx`.
 - AI key + base URL + chat model id: **per account**, secure storage on native, `localStorage` on web.
 - **Theme preference** (`system` / `light` / `dark`): device-local key `app_theme_preference_v1` (same storage abstraction; not a secret). See `src/constants/theme-preference.ts` + `src/ctx/theme-preference-context.tsx`.
 - Legacy global API key migration (see `security-and-secrets.md`).
 
 ## Known gaps
 
-- No **server** auth or synced history.
-- No **persistent** chat threads (reload loses in-memory messages).
+- No **server** auth or **cloud-synced** history (local encrypted threads only).
 - Forgot password and auth need a real backend for production.

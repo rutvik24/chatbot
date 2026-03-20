@@ -1,5 +1,5 @@
-import { SymbolView } from 'expo-symbols';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { SymbolView } from "expo-symbols";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -8,49 +8,49 @@ import {
   TextInput,
   View,
   useColorScheme,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { AppButton, AppText, AppTextInput } from '@/components/common';
-import { useSession } from '@/ctx/auth-context';
-import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
-import { useStorageState } from '@/hooks/use-storage-state';
-import { displayEmailFromSession } from '@/utils/session-email';
+import { AppButton, AppText, AppTextInput } from "@/components/common";
+import { useSession } from "@/ctx/auth-context";
+import { useNativeThemeColors } from "@/hooks/use-native-theme-colors";
+import { useStorageState } from "@/hooks/use-storage-state";
+import { displayEmailFromSession } from "@/utils/session-email";
 import {
   getUserProfileStorageKey,
   parseUserProfileFromStorage,
   type UserProfileFields,
-} from '@/utils/user-profile-chat';
+} from "@/utils/user-profile-chat";
 
 type Profile = UserProfileFields;
 
 function capitalize(s: string): string {
-  if (!s) return '';
+  if (!s) return "";
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function defaultNamesFromEmail(email: string): Profile {
-  const localPart = email.split('@')[0] ?? '';
-  const withCamelSplit = localPart.replace(/([a-z])([A-Z])/g, '$1 $2');
-  const normalized = withCamelSplit.replace(/[^a-zA-Z0-9]+/g, ' ');
+  const localPart = email.split("@")[0] ?? "";
+  const withCamelSplit = localPart.replace(/([a-z])([A-Z])/g, "$1 $2");
+  const normalized = withCamelSplit.replace(/[^a-zA-Z0-9]+/g, " ");
   const tokens = normalized.trim().split(/\s+/).filter(Boolean);
 
-  const firstName = tokens[0] ? capitalize(tokens[0]) : '';
-  const lastName = tokens[1] ? capitalize(tokens[1]) : '';
+  const firstName = tokens[0] ? capitalize(tokens[0]) : "";
+  const lastName = tokens[1] ? capitalize(tokens[1]) : "";
   return { firstName, lastName };
 }
 
 function cardShadow() {
   return Platform.select({
     ios: {
-      shadowColor: '#000',
+      shadowColor: "#000",
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.07,
       shadowRadius: 14,
     },
     android: { elevation: 2 },
     default: {
-      shadowColor: '#000',
+      shadowColor: "#000",
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.05,
       shadowRadius: 10,
@@ -73,7 +73,7 @@ export default function SettingsProfileScreen() {
   const [profile, setProfile] = useState<Profile>(() =>
     parseUserProfileFromStorage(profileValue),
   );
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState("");
   const lastNameRef = useRef<TextInput>(null);
   const didAutoFillDefaultsRef = useRef(false);
 
@@ -103,31 +103,33 @@ export default function SettingsProfileScreen() {
 
   const saveProfile = () => {
     setProfileValue(JSON.stringify(profile));
-    setMessage('Profile saved. The assistant will use this on your next message.');
+    setMessage(
+      "Profile saved. The assistant will use this on your next message.",
+    );
   };
 
   const avatarLetter = (
     profile.firstName.trim().charAt(0) ||
     email.charAt(0) ||
-    '?'
+    "?"
   ).toUpperCase();
 
   return (
     <SafeAreaView
-      edges={['bottom', 'left', 'right']}
+      edges={["bottom", "left", "right"]}
       style={[styles.container, { backgroundColor: colors.background }]}
     >
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 8}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           contentInsetAdjustmentBehavior={
-            Platform.OS === 'ios' ? 'automatic' : undefined
+            Platform.OS === "ios" ? "automatic" : undefined
           }
         >
           {/* Hero */}
@@ -141,9 +143,7 @@ export default function SettingsProfileScreen() {
               },
             ]}
           >
-            <View
-              style={[styles.avatar, { backgroundColor: colors.primary }]}
-            >
+            <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
               <AppText style={styles.avatarLetter}>{avatarLetter}</AppText>
             </View>
             <View style={styles.heroText}>
@@ -153,19 +153,15 @@ export default function SettingsProfileScreen() {
               <View style={styles.emailRow}>
                 <SymbolView
                   name={{
-                    ios: 'envelope.fill',
-                    android: 'mail',
-                    web: 'mail',
+                    ios: "envelope.fill",
+                    android: "mail",
+                    web: "mail",
                   }}
                   size={14}
                   tintColor={colors.secondaryText}
                 />
-                <AppText
-                  muted
-                  numberOfLines={1}
-                  style={styles.emailText}
-                >
-                  {email || 'Not signed in'}
+                <AppText muted numberOfLines={1} style={styles.emailText}>
+                  {email || "Not signed in"}
                 </AppText>
               </View>
             </View>
@@ -246,7 +242,7 @@ export default function SettingsProfileScreen() {
               <View
                 pointerEvents="none"
                 style={[
-                  StyleSheet.absoluteFillObject,
+                  StyleSheet.absoluteFill,
                   {
                     backgroundColor: colors.success,
                     opacity: 0.1,
@@ -256,16 +252,14 @@ export default function SettingsProfileScreen() {
               />
               <SymbolView
                 name={{
-                  ios: 'checkmark.circle.fill',
-                  android: 'check_circle',
-                  web: 'check_circle',
+                  ios: "checkmark.circle.fill",
+                  android: "check_circle",
+                  web: "check_circle",
                 }}
                 size={22}
                 tintColor={colors.success}
               />
-              <AppText
-                style={[styles.successText, { color: colors.text }]}
-              >
+              <AppText style={[styles.successText, { color: colors.text }]}>
                 {message}
               </AppText>
             </View>
@@ -292,8 +286,8 @@ const styles = StyleSheet.create({
     gap: 22,
   },
   heroCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 16,
     padding: 20,
     borderRadius: 20,
@@ -303,13 +297,13 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   avatarLetter: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 26,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   heroText: {
     flex: 1,
@@ -318,18 +312,18 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     fontSize: 22,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: -0.4,
   },
   emailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   emailText: {
     flex: 1,
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   section: {
     gap: 8,
@@ -337,12 +331,12 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: "800",
   },
   sectionSubtitle: {
     fontSize: 14,
     lineHeight: 21,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   formCard: {
     borderRadius: 20,
@@ -351,7 +345,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   nameRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   nameInput: {
@@ -363,10 +357,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   successBanner: {
-    position: 'relative',
-    overflow: 'hidden',
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    position: "relative",
+    overflow: "hidden",
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 12,
     padding: 16,
     borderRadius: 16,
@@ -375,11 +369,12 @@ const styles = StyleSheet.create({
   successText: {
     flex: 1,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     lineHeight: 20,
   },
   loadingHint: {
-    textAlign: 'center',
+    textAlign: "center",
     fontSize: 13,
   },
 });
+

@@ -1,15 +1,15 @@
-import { SymbolView } from 'expo-symbols';
-import type { ComponentProps, ReactNode } from 'react';
+import { SymbolView } from "expo-symbols";
+import type { ComponentProps, ReactNode } from "react";
 import {
   Platform,
   Pressable,
   StyleSheet,
   View,
   type ViewStyle,
-} from 'react-native';
+} from "react-native";
 
-import { AppText } from '@/components/common';
-import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
+import { AppText } from "@/components/common";
+import { useNativeThemeColors } from "@/hooks/use-native-theme-colors";
 
 /** Pass to `AppButton` `style` on auth screens for consistent CTAs. */
 export const AUTH_PRIMARY_BUTTON_STYLE: ViewStyle = {
@@ -20,14 +20,14 @@ export const AUTH_PRIMARY_BUTTON_STYLE: ViewStyle = {
 function cardShadow() {
   return Platform.select({
     ios: {
-      shadowColor: '#000',
+      shadowColor: "#000",
       shadowOffset: { width: 0, height: 10 },
       shadowOpacity: 0.09,
       shadowRadius: 26,
     },
     android: { elevation: 5 },
     default: {
-      shadowColor: '#000',
+      shadowColor: "#000",
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.07,
       shadowRadius: 18,
@@ -40,8 +40,8 @@ export const authScrollContentStyle: ViewStyle = {
   paddingHorizontal: 20,
   paddingTop: 20,
   paddingBottom: 40,
-  alignItems: 'center',
-  justifyContent: 'center',
+  alignItems: "center",
+  justifyContent: "center",
   flexGrow: 1,
 };
 
@@ -67,7 +67,7 @@ export function AuthHero({
 }: {
   title: string;
   subtitle: string;
-  icon: ComponentProps<typeof SymbolView>['name'];
+  icon: ComponentProps<typeof SymbolView>["name"];
 }) {
   const colors = useNativeThemeColors();
   return (
@@ -97,11 +97,11 @@ export function AuthFeedbackBanner({
   tone,
   message,
 }: {
-  tone: 'error' | 'success';
+  tone: "error" | "success";
   message: string;
 }) {
   const colors = useNativeThemeColors();
-  const accent = tone === 'error' ? colors.error : colors.success;
+  const accent = tone === "error" ? colors.error : colors.success;
   return (
     <View
       style={[
@@ -115,7 +115,7 @@ export function AuthFeedbackBanner({
       <View
         pointerEvents="none"
         style={[
-          StyleSheet.absoluteFillObject,
+          StyleSheet.absoluteFill,
           {
             backgroundColor: accent,
             opacity: 0.1,
@@ -125,16 +125,16 @@ export function AuthFeedbackBanner({
       />
       <SymbolView
         name={
-          tone === 'error'
+          tone === "error"
             ? {
-                ios: 'exclamationmark.circle.fill',
-                android: 'error',
-                web: 'error',
+                ios: "exclamationmark.circle.fill",
+                android: "error",
+                web: "error",
               }
             : {
-                ios: 'checkmark.circle.fill',
-                android: 'check_circle',
-                web: 'check_circle',
+                ios: "checkmark.circle.fill",
+                android: "check_circle",
+                web: "check_circle",
               }
         }
         size={20}
@@ -158,10 +158,7 @@ export function AuthTextButton({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.textBtn,
-        { opacity: pressed ? 0.72 : 1 },
-      ]}
+      style={({ pressed }) => [styles.textBtn, { opacity: pressed ? 0.72 : 1 }]}
       accessibilityRole="button"
       accessibilityLabel={label}
     >
@@ -196,7 +193,7 @@ export function AuthLinksRow({
 
 const styles = StyleSheet.create({
   card: {
-    width: '100%',
+    width: "100%",
     maxWidth: 440,
     borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
@@ -205,7 +202,7 @@ const styles = StyleSheet.create({
     gap: 18,
   },
   hero: {
-    alignItems: 'center',
+    alignItems: "center",
     gap: 10,
     marginBottom: 4,
   },
@@ -214,27 +211,27 @@ const styles = StyleSheet.create({
     height: 64,
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   heroTitle: {
     fontSize: 26,
-    fontWeight: '800',
+    fontWeight: "800",
     letterSpacing: -0.5,
-    textAlign: 'center',
+    textAlign: "center",
   },
   heroSubtitle: {
     fontSize: 15,
     lineHeight: 22,
-    fontWeight: '500',
-    textAlign: 'center',
+    fontWeight: "500",
+    textAlign: "center",
     paddingHorizontal: 8,
   },
   feedback: {
-    position: 'relative',
-    overflow: 'hidden',
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    position: "relative",
+    overflow: "hidden",
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: 10,
     padding: 14,
     borderRadius: 14,
@@ -243,7 +240,7 @@ const styles = StyleSheet.create({
   feedbackText: {
     flex: 1,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
     lineHeight: 20,
   },
   textBtn: {
@@ -252,19 +249,19 @@ const styles = StyleSheet.create({
   },
   textBtnLabel: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   linksRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 4,
     marginTop: 4,
   },
   linkCluster: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
   },
   linkSep: {
@@ -273,3 +270,4 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
 });
+

@@ -28,9 +28,15 @@ import { AppText } from "@/components/common";
 import MarkdownMessage from "@/components/markdown-message";
 import { TabScreenHeader } from "@/components/tab-screen-header";
 import { useChatActions } from "@/ctx/chat-actions-context";
+import { useChatHistory } from "@/ctx/chat-history-context";
 import { useSession } from "@/ctx/auth-context";
 import { useNativeThemeColors } from "@/hooks/use-native-theme-colors";
 import { useStorageState } from "@/hooks/use-storage-state";
+import {
+  createChatSessionId,
+  loadChatHistoryStore,
+  persistChatSession,
+} from "@/services/chat-history-storage";
 import {
   DEFAULT_CHAT_MODEL_ID,
   listOpenAiCompatibleChatModels,
@@ -51,6 +57,7 @@ import {
   getChatModelIdStorageKey,
   getOpenAiCompatibleBaseUrlStorageKey,
 } from "@/utils/ai-credentials-storage";
+import { getChatLaunchPreference } from "@/utils/chat-launch-preference";
 import {
   getFriendlyChatProviderError,
   logChatProviderError,
@@ -68,6 +75,9 @@ export default function HomeScreen() {
   const colors = useNativeThemeColors();
   const [text, setText] = useState("");
   const [messages, setMessages] = useState<ChatMessageWithTime[]>([]);
+  /** Stable id for the current thread (persisted + history). */
+  const [chatSessionId, setChatSessionId] = useState("");
+  const [historyHydrated, setHistoryHydrated] = useState(false);
   const storageKey = useMemo(
     () => getAiApiKeyStorageKey(session),
     [session],
@@ -135,6 +145,8 @@ export default function HomeScreen() {
     () => buildChatTimelineRows(messages),
     [messages],
   );
+  const chatTimelineRowsRef = useRef(chatTimelineRows);
+  chatTimelineRowsRef.current = chatTimelineRows;
 
   const listRef = useRef<FlatList<ChatTimelineRow>>(null);
 
@@ -159,19 +171,100 @@ export default function HomeScreen() {
     modelsListCacheRef.current = null;
   }, [effectiveAiApiKey, storedOpenAiBaseUrl]);
 
+  const { notifyPersisted, registerApplyHistorySession } = useChatHistory();
+
+  useEffect(() => {
+    if (!session) {
+      setMessages([]);
+      setChatSessionId("");
+      setHistoryHydrated(true);
+      return;
+    }
+
+    let cancelled = false;
+    setHistoryHydrated(false);
+    setMessages([]);
+    setChatSessionId("");
+
+    void (async () => {
+      const launchPref = await getChatLaunchPreference(session);
+      const store = await loadChatHistoryStore(session);
+      if (cancelled) return;
+
+      if (launchPref === "start_fresh") {
+        const id = createChatSessionId();
+        setChatSessionId(id);
+        setMessages([]);
+        await persistChatSession(session, {
+          activeSessionId: id,
+          currentSessionId: id,
+          messages: [],
+          modelId: DEFAULT_CHAT_MODEL_ID,
+        });
+      } else if (store.activeSessionId) {
+        const hit = store.sessions.find((s) => s.id === store.activeSessionId);
+        setChatSessionId(store.activeSessionId);
+        if (hit?.messages?.length) {
+          setMessages(hit.messages);
+        }
+      } else {
+        const id = createChatSessionId();
+        setChatSessionId(id);
+        await persistChatSession(session, {
+          activeSessionId: id,
+          currentSessionId: id,
+          messages: [],
+          modelId: DEFAULT_CHAT_MODEL_ID,
+        });
+      }
+      if (!cancelled) {
+        setHistoryHydrated(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
+  useEffect(() => {
+    if (!historyHydrated || !chatSessionId || !session) return;
+    const t = setTimeout(() => {
+      void (async () => {
+        await persistChatSession(session, {
+          activeSessionId: chatSessionId,
+          currentSessionId: chatSessionId,
+          messages,
+          modelId: effectiveChatModelId,
+        });
+        notifyPersisted();
+      })();
+    }, 750);
+    return () => clearTimeout(t);
+  }, [
+    messages,
+    chatSessionId,
+    session,
+    effectiveChatModelId,
+    historyHydrated,
+    notifyPersisted,
+  ]);
+
   const canSend = useMemo(
     () =>
       text.trim().length > 0 &&
       !isGenerating &&
       !isSessionLoading &&
       !isMigratingKey &&
-      !!effectiveAiApiKey.trim(),
+      !!effectiveAiApiKey.trim() &&
+      historyHydrated,
     [
       text,
       isGenerating,
       isSessionLoading,
       isMigratingKey,
       effectiveAiApiKey,
+      historyHydrated,
     ],
   );
 
@@ -238,6 +331,41 @@ export default function HomeScreen() {
       });
     });
   }, []);
+
+  /**
+   * Pin to the latest messages when opening Chat, restoring history, or returning to the tab.
+   */
+  const snapChatListToBottom = useCallback(() => {
+    shouldAutoScrollRef.current = true;
+    isAtBottomRef.current = true;
+    stickToBottomRef.current = false;
+    prevScrolledAwayRef.current = false;
+    jumpScrollLockUntilRef.current = Date.now() + 700;
+    setShowJumpToBottomFab(false);
+    const list = listRef.current;
+    if (!list) return;
+    const run = () => list.scrollToEnd({ animated: false });
+    queueMicrotask(run);
+    requestAnimationFrame(() => {
+      run();
+      requestAnimationFrame(() => {
+        run();
+      });
+    });
+  }, []);
+
+  /**
+   * After session/history hydrates, land on the newest messages once (not on every new message).
+   */
+  useEffect(() => {
+    if (!historyHydrated) return;
+    if (chatTimelineRows.length === 0) return;
+    const id = requestAnimationFrame(() => {
+      snapChatListToBottom();
+    });
+    return () => cancelAnimationFrame(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only when `historyHydrated` flips; rows read from this commit
+  }, [historyHydrated, snapChatListToBottom]);
 
   const wasGeneratingRef = useRef(false);
   useEffect(() => {
@@ -517,6 +645,21 @@ export default function HomeScreen() {
     ]),
   );
 
+  // Opening the Chat tab: scroll to the latest messages when there is history to show.
+  useFocusEffect(
+    useCallback(() => {
+      if (!historyHydrated) return;
+      const id = requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (chatTimelineRowsRef.current.length > 0) {
+            snapChatListToBottom();
+          }
+        });
+      });
+      return () => cancelAnimationFrame(id);
+    }, [historyHydrated, snapChatListToBottom]),
+  );
+
   const makeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   const appendAssistantToken = (assistantId: string, tokenBuffer: string) => {
@@ -711,10 +854,15 @@ export default function HomeScreen() {
   };
 
   const handleNewChat = useCallback(() => {
+    const prevId = chatSessionId;
+    const prevMessages = messages;
+
     generationRunIdRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
     setIsGenerating(false);
+    const newId = createChatSessionId();
+    setChatSessionId(newId);
     setMessages([]);
     setText("");
     setError(null);
@@ -730,13 +878,63 @@ export default function HomeScreen() {
     requestAnimationFrame(() => {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
     });
-  }, []);
+
+    void (async () => {
+      if (session && historyHydrated && prevId) {
+        await persistChatSession(session, {
+          activeSessionId: prevId,
+          currentSessionId: prevId,
+          messages: prevMessages,
+          modelId: effectiveChatModelId,
+        });
+      }
+      if (session && historyHydrated) {
+        await persistChatSession(session, {
+          activeSessionId: newId,
+          currentSessionId: newId,
+          messages: [],
+          modelId: effectiveChatModelId,
+        });
+      }
+      notifyPersisted();
+    })();
+  }, [
+    session,
+    historyHydrated,
+    chatSessionId,
+    messages,
+    effectiveChatModelId,
+    notifyPersisted,
+  ]);
 
   const { registerStartNewChat } = useChatActions();
   useEffect(() => {
     registerStartNewChat(handleNewChat);
     return () => registerStartNewChat(null);
   }, [registerStartNewChat, handleNewChat]);
+
+  useEffect(() => {
+    registerApplyHistorySession((payload) => {
+      generationRunIdRef.current += 1;
+      abortRef.current?.abort();
+      abortRef.current = null;
+      setIsGenerating(false);
+      setChatSessionId(payload.sessionId);
+      setMessages(payload.messages);
+      setText("");
+      setError(null);
+      setModelPickerOpen(false);
+      setModelSearch("");
+      lastScrollOffsetYRef.current = 0;
+      requestAnimationFrame(() => {
+        snapChatListToBottom();
+        requestAnimationFrame(() => {
+          snapChatListToBottom();
+        });
+      });
+    });
+    return () => registerApplyHistorySession(null);
+  }, [registerApplyHistorySession, snapChatListToBottom]);
 
   const openDrawer = useCallback(() => {
     navigation.dispatch(DrawerActions.openDrawer());

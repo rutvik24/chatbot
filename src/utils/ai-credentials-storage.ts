@@ -1,6 +1,8 @@
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
+import { getSessionAccountStorageSuffix } from "@/utils/session-account-storage";
+
 /**
  * Global API key slot (pre–per-account). Backing id unchanged so existing installs
  * keep their key (`openrouter-api-key`). Cleared after migration to a per-user key
@@ -46,26 +48,14 @@ export function getAiApiKeyStorageKey(session: string | null): string {
 export function getOpenAiCompatibleBaseUrlStorageKey(
   session: string | null,
 ): string {
-  const email = session?.startsWith("session-")
-    ? session.slice("session-".length)
-    : null;
-  if (!email) return "openai-compatible-base-url";
-
-  const safeEmail = email.replace(/[^a-zA-Z0-9._-]/g, "_");
-
-  return safeEmail
-    ? `openai-compatible-base-url-${safeEmail}`
-    : "openai-compatible-base-url";
+  const suffix = getSessionAccountStorageSuffix(session);
+  if (!suffix) return "openai-compatible-base-url";
+  return `openai-compatible-base-url-${suffix}`;
 }
 
 /** Per-user selected chat model id (OpenAI-compatible `model` string). */
 export function getChatModelIdStorageKey(session: string | null): string {
-  const email = session?.startsWith("session-")
-    ? session.slice("session-".length)
-    : null;
-  if (!email) return "chat-model-id";
-
-  const safeEmail = email.replace(/[^a-zA-Z0-9._-]/g, "_");
-
-  return safeEmail ? `chat-model-id-${safeEmail}` : "chat-model-id";
+  const suffix = getSessionAccountStorageSuffix(session);
+  if (!suffix) return "chat-model-id";
+  return `chat-model-id-${suffix}`;
 }
