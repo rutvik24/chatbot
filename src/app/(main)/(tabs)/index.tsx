@@ -4,6 +4,8 @@ import {
   useNavigation,
 } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
+import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { SymbolView } from "expo-symbols";
@@ -31,6 +33,8 @@ import {
 } from "react-native-safe-area-context";
 
 import { AppText } from "@/components/common";
+import { ChatAttachSheet } from "@/components/chat-attach-sheet";
+import { ChatAttachmentChips } from "@/components/chat-attachment-chips";
 import MarkdownMessage from "@/components/markdown-message";
 import { TabScreenHeader } from "@/components/tab-screen-header";
 import { useChatActions } from "@/ctx/chat-actions-context";
@@ -47,11 +51,21 @@ import {
   DEFAULT_CHAT_MODEL_ID,
   listOpenAiCompatibleChatModels,
   streamChatCompletion,
-  type ChatMessage,
 } from "@/services/openai-compatible-chat";
+import { CHAT_MAX_ATTACHMENTS } from "@/utils/chat-attachment-constants";
+import { sanitizeChatMessagesForPersistence } from "@/utils/chat-attachment-persistence";
+import {
+  StageAttachmentError,
+  stagePickedAsset,
+} from "@/utils/chat-attachment-staging";
+import {
+  buildChatCompletionHistory,
+  type ChatCompletionMessageParam,
+} from "@/utils/chat-completion-history";
 import {
   buildChatTimelineRows,
   formatMessageTime,
+  type ChatAttachment,
   type ChatMessageWithTime,
   type ChatTimelineRow,
 } from "@/utils/chat-timeline";
@@ -87,6 +101,10 @@ export default function HomeScreen() {
   const colors = useNativeThemeColors();
   const safeInsets = useSafeAreaInsets();
   const [text, setText] = useState("");
+  const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>(
+    [],
+  );
+  const [attachSheetOpen, setAttachSheetOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessageWithTime[]>([]);
   /** Stable id for the current thread (persisted + history). */
   const [chatSessionId, setChatSessionId] = useState("");
@@ -193,7 +211,7 @@ export default function HomeScreen() {
 
   /** FIFO: sends and edit→regenerate while a reply is streaming. Drained when a run finishes (not on Stop). */
   type QueuedGenerationJob =
-    | { type: "send"; userText: string }
+    | { type: "send"; userText: string; attachments: ChatAttachment[] }
     | { type: "regenerate"; messageId: string; trimmed: string };
   const generationQueueRef = useRef<QueuedGenerationJob[]>([]);
   const [pendingGenerationQueueCount, setPendingGenerationQueueCount] =
@@ -293,7 +311,7 @@ export default function HomeScreen() {
         await persistChatSession(session, {
           activeSessionId: chatSessionId,
           currentSessionId: chatSessionId,
-          messages,
+          messages: sanitizeChatMessagesForPersistence(messages),
           modelId: effectiveChatModelId,
         });
         notifyPersisted();
@@ -328,7 +346,7 @@ export default function HomeScreen() {
 
   const composerSubmitDisabled = useMemo(
     () =>
-      !text.trim() ||
+      (!text.trim() && pendingAttachments.length === 0) ||
       isSessionLoading ||
       isMigratingKey ||
       !historyHydrated ||
@@ -336,6 +354,7 @@ export default function HomeScreen() {
       !effectiveAiApiKey.trim(),
     [
       text,
+      pendingAttachments.length,
       isSessionLoading,
       isMigratingKey,
       historyHydrated,
@@ -749,6 +768,164 @@ export default function HomeScreen() {
 
   const makeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+  const attachChipColors = useMemo(
+    () => ({
+      surface: colors.surface,
+      border: colors.border,
+      text: colors.text,
+      secondaryText: colors.secondaryText,
+      primary: colors.primary,
+      background: colors.background,
+    }),
+    [
+      colors.surface,
+      colors.border,
+      colors.text,
+      colors.secondaryText,
+      colors.primary,
+      colors.background,
+    ],
+  );
+
+  const bubbleUserAttachColors = useMemo(
+    () => ({
+      surface: "rgba(255,255,255,0.14)",
+      border: "rgba(255,255,255,0.28)",
+      text: "#FFFFFF",
+      secondaryText: "rgba(255,255,255,0.78)",
+      primary: "#FFFFFF",
+    }),
+    [],
+  );
+
+  const appendStagedAttachments = useCallback(
+    async (inputs: Parameters<typeof stagePickedAsset>[0][]) => {
+      const room = Math.max(0, CHAT_MAX_ATTACHMENTS - pendingAttachments.length);
+      if (room <= 0) {
+        showToast({
+          variant: "error",
+          title: "Attachment limit",
+          message: `You can add up to ${CHAT_MAX_ATTACHMENTS} files per message.`,
+        });
+        return;
+      }
+      const slice = inputs.slice(0, room);
+      if (inputs.length > slice.length) {
+        showToast({
+          variant: "info",
+          title: "Some items skipped",
+          message: `Only ${CHAT_MAX_ATTACHMENTS} attachments fit in one message.`,
+        });
+      }
+      for (const input of slice) {
+        try {
+          const staged = await stagePickedAsset(input);
+          setPendingAttachments((prev) => {
+            if (prev.length >= CHAT_MAX_ATTACHMENTS) return prev;
+            return [...prev, staged];
+          });
+        } catch (e) {
+          const msg =
+            e instanceof StageAttachmentError
+              ? e.message
+              : "Couldn’t add that attachment.";
+          showToast({ variant: "error", title: "Attachment", message: msg });
+        }
+      }
+    },
+    [pendingAttachments.length],
+  );
+
+  const pickFromPhotoLibrary = useCallback(async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      showToast({
+        variant: "error",
+        title: "Photos",
+        message: "Allow photo access in Settings to attach images.",
+      });
+      return;
+    }
+    const limit = Math.max(1, CHAT_MAX_ATTACHMENTS - pendingAttachments.length);
+    const allowMulti = limit > 1;
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsMultipleSelection: allowMulti,
+      ...(allowMulti ? { selectionLimit: limit } : {}),
+      quality: 0.88,
+    });
+    if (res.canceled) return;
+    const assets = res.assets ?? [];
+    const inputs = assets.map((a) => ({
+      sourceUri: a.uri,
+      name: a.fileName ?? `Photo-${Date.now()}.jpg`,
+      mimeType: a.mimeType ?? "image/jpeg",
+      kind: "image" as const,
+    }));
+    await appendStagedAttachments(inputs);
+  }, [appendStagedAttachments, pendingAttachments.length]);
+
+  const pickFromCamera = useCallback(async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) {
+      showToast({
+        variant: "error",
+        title: "Camera",
+        message: "Allow camera access to capture a photo.",
+      });
+      return;
+    }
+    const res = await ImagePicker.launchCameraAsync({ quality: 0.88 });
+    if (res.canceled) return;
+    const a = res.assets?.[0];
+    if (!a?.uri) return;
+    await appendStagedAttachments([
+      {
+        sourceUri: a.uri,
+        name: a.fileName ?? `Capture-${Date.now()}.jpg`,
+        mimeType: a.mimeType ?? "image/jpeg",
+        kind: "image",
+      },
+    ]);
+  }, [appendStagedAttachments]);
+
+  const pickFromFiles = useCallback(async () => {
+    const limit = Math.max(1, CHAT_MAX_ATTACHMENTS - pendingAttachments.length);
+    const res = await DocumentPicker.getDocumentAsync({
+      type: [
+        "application/pdf",
+        "text/*",
+        "application/json",
+        "image/*",
+      ],
+      multiple: limit > 1,
+      copyToCacheDirectory: true,
+    });
+    if (res.canceled) return;
+    const assets = res.assets ?? [];
+    const inputs = assets.slice(0, limit).map((asset) => {
+      let sourceUri = asset.uri;
+      if (Platform.OS === "web" && asset.base64 && asset.mimeType) {
+        sourceUri = `data:${asset.mimeType};base64,${asset.base64}`;
+      }
+      const mime = asset.mimeType ?? "application/octet-stream";
+      const kind: "image" | "file" = mime.startsWith("image/")
+        ? "image"
+        : "file";
+      return {
+        sourceUri,
+        name: asset.name || "document",
+        mimeType: mime,
+        kind,
+      };
+    });
+    await appendStagedAttachments(inputs);
+  }, [appendStagedAttachments, pendingAttachments.length]);
+
+  const removePendingAttachment = useCallback((id: string) => {
+    setPendingAttachments((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
   const appendAssistantToken = (assistantId: string, tokenBuffer: string) => {
     if (!tokenBuffer) return;
     const follow =
@@ -765,7 +942,12 @@ export default function HomeScreen() {
   };
 
   type AssistantStreamCancel =
-    | { mode: "send"; userMessageId: string; restoreComposer: string }
+    | {
+        mode: "send";
+        userMessageId: string;
+        restoreComposer: string;
+        restoreAttachments: ChatAttachment[];
+      }
     | { mode: "edit" };
 
   /** Declared below; used from `runAssistantStream` `finally` (hoisted). */
@@ -792,7 +974,7 @@ export default function HomeScreen() {
         void processGenerationQueue();
         return;
       }
-      await performSendUserText(job.userText);
+      await performSendUserText(job.userText, job.attachments);
       return;
     }
 
@@ -827,7 +1009,7 @@ export default function HomeScreen() {
     runId: number;
     abortController: AbortController;
     assistantMessageId: string;
-    history: ChatMessage[];
+    history: ChatCompletionMessageParam[];
     cancelBehavior: AssistantStreamCancel;
   }): Promise<void> {
     const {
@@ -893,6 +1075,7 @@ export default function HomeScreen() {
               ),
             );
             setText(cancelBehavior.restoreComposer);
+            setPendingAttachments([...cancelBehavior.restoreAttachments]);
             requestAnimationFrame(() => {
               composerInputRef.current?.focus();
             });
@@ -993,12 +1176,11 @@ export default function HomeScreen() {
       session,
       profileJsonForChat,
     );
-    const recentTurns: ChatMessage[] = nextBase
-      .map(({ role, content }) => ({ role, content }))
-      .slice(-10);
-    const history: ChatMessage[] = personalization
-      ? [personalization, ...recentTurns]
-      : recentTurns;
+    const recentTurns = nextBase.slice(-10);
+    const history = await buildChatCompletionHistory(
+      personalization,
+      recentTurns,
+    );
 
     await runAssistantStream({
       runId,
@@ -1009,7 +1191,10 @@ export default function HomeScreen() {
     });
   }
 
-  async function performSendUserText(value: string): Promise<void> {
+  async function performSendUserText(
+    value: string,
+    attachmentSnapshot: ChatAttachment[],
+  ): Promise<void> {
     shouldAutoScrollRef.current = true;
     isAtBottomRef.current = true;
     stickToBottomRef.current = true;
@@ -1031,6 +1216,8 @@ export default function HomeScreen() {
       role: "user",
       content: value,
       createdAt: sentAt,
+      attachments:
+        attachmentSnapshot.length > 0 ? attachmentSnapshot : undefined,
     };
     const assistantMsg: ChatMessageWithTime = {
       id: assistantMessageId,
@@ -1066,13 +1253,11 @@ export default function HomeScreen() {
       session,
       profileJsonForChat,
     );
-    const recentTurns: ChatMessage[] = [
-      ...messagesBeforeSend.map(({ role, content }) => ({ role, content })),
-      { role: "user" as const, content: value },
-    ].slice(-10);
-    const history: ChatMessage[] = personalization
-      ? [personalization, ...recentTurns]
-      : recentTurns;
+    const recentTurns = [...messagesBeforeSend, userMsg].slice(-10);
+    const history = await buildChatCompletionHistory(
+      personalization,
+      recentTurns,
+    );
 
     await runAssistantStream({
       runId,
@@ -1083,13 +1268,15 @@ export default function HomeScreen() {
         mode: "send",
         userMessageId,
         restoreComposer: value,
+        restoreAttachments: attachmentSnapshot.map((a) => ({ ...a })),
       },
     });
   }
 
   const handleSend = async () => {
     const value = text.trim();
-    if (!value) {
+    const atSnap = pendingAttachments.map((a) => ({ ...a }));
+    if (!value && atSnap.length === 0) {
       return;
     }
 
@@ -1107,9 +1294,14 @@ export default function HomeScreen() {
     }
 
     if (isGeneratingRef.current) {
-      generationQueueRef.current.push({ type: "send", userText: value });
+      generationQueueRef.current.push({
+        type: "send",
+        userText: value,
+        attachments: atSnap,
+      });
       setPendingGenerationQueueCount(generationQueueRef.current.length);
       setText("");
+      setPendingAttachments([]);
       showToast({
         variant: "info",
         title: "Queued",
@@ -1120,7 +1312,8 @@ export default function HomeScreen() {
 
     setError(null);
     setText("");
-    await performSendUserText(value);
+    setPendingAttachments([]);
+    await performSendUserText(value, atSnap);
   };
 
   const saveMessageEdit = () => {
@@ -1266,6 +1459,7 @@ export default function HomeScreen() {
     setChatSessionId(newId);
     setMessages([]);
     setText("");
+    setPendingAttachments([]);
     setError(null);
     setModelPickerOpen(false);
     setModelSearch("");
@@ -1326,6 +1520,7 @@ export default function HomeScreen() {
       setChatSessionId(payload.sessionId);
       setMessages(payload.messages);
       setText("");
+      setPendingAttachments([]);
       setError(null);
       setModelPickerOpen(false);
       setModelSearch("");
@@ -1450,6 +1645,7 @@ export default function HomeScreen() {
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.messagesContent}
             keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled={Platform.OS === "android"}
             onScroll={handleScroll}
             onScrollBeginDrag={handleScrollBeginDrag}
             onMomentumScrollBegin={handleMomentumScrollBegin}
@@ -1503,8 +1699,9 @@ export default function HomeScreen() {
                   Start the conversation
                 </AppText>
                 <AppText muted style={styles.emptyChatBody}>
-                  Type a message below. Answers appear word by word. Open the
-                  menu anytime for a new chat or to tune AI settings.
+                  Type below or tap + to add photos, scans, or documents — the
+                  assistant can read them when your model supports vision or
+                  files. Open the menu for a new chat or AI settings.
                 </AppText>
               </View>
             }
@@ -1629,6 +1826,14 @@ export default function HomeScreen() {
                           },
                     ]}
                   >
+                    {item.role === "user" &&
+                    (item.attachments?.length ?? 0) > 0 ? (
+                      <ChatAttachmentChips
+                        attachments={item.attachments!}
+                        colors={bubbleUserAttachColors}
+                        variant="bubble"
+                      />
+                    ) : null}
                     {item.role === "assistant" &&
                     (!item.content || item.content === "...") ? (
                       <View style={styles.thinkingRow}>
@@ -1645,7 +1850,9 @@ export default function HomeScreen() {
                           Thinking…
                         </AppText>
                       </View>
-                    ) : (
+                    ) : item.role === "user" &&
+                      !(item.content ?? "").trim() &&
+                      (item.attachments?.length ?? 0) > 0 ? null : (
                       <MarkdownMessage
                         tone={item.role === "user" ? "onPrimary" : "default"}
                         markdown={
@@ -1662,7 +1869,9 @@ export default function HomeScreen() {
                     const canCopyWhole =
                       messageCopyEnabled &&
                       !isThinkingPlaceholder &&
-                      (item.content ?? "").trim().length > 0;
+                      ((item.content ?? "").trim().length > 0 ||
+                        (item.role === "user" &&
+                          (item.attachments?.length ?? 0) > 0));
                     const canEditUser =
                       item.role === "user" &&
                       historyHydrated &&
@@ -1708,7 +1917,20 @@ export default function HomeScreen() {
                             accessibilityRole="button"
                             accessibilityLabel="Copy whole message"
                             hitSlop={10}
-                            onPress={() => void copyWholeMessage(item.content)}
+                            onPress={() =>
+                              void copyWholeMessage(
+                                [
+                                  (item.content ?? "").trim(),
+                                  ...(item.role === "user"
+                                    ? (item.attachments ?? []).map(
+                                        (a) => `📎 ${a.name}`,
+                                      )
+                                    : []),
+                                ]
+                                  .filter((line) => line.length > 0)
+                                  .join("\n\n"),
+                              )
+                            }
                             style={({ pressed }) => [
                               styles.messageCopyButton,
                               { opacity: pressed ? 0.65 : 1 },
@@ -1760,77 +1982,122 @@ export default function HomeScreen() {
                 },
               ]}
             >
-            <View style={styles.composerInputRow}>
-              <TextInput
-                ref={composerInputRef}
-                placeholder="Message the assistant…"
-                placeholderTextColor={colors.placeholder as string}
-                value={text}
-                onChangeText={setText}
-                multiline
-                textAlignVertical="top"
-                style={[
-                  styles.input,
-                  {
-                    color: colors.text,
-                  },
-                ]}
-                onSubmitEditing={() => {
-                  void handleSend();
-                }}
-                returnKeyType="default"
-              />
-              {isGenerating ? (
+              <View style={styles.composerAttachSection}>
+                <ChatAttachmentChips
+                  attachments={pendingAttachments}
+                  colors={attachChipColors}
+                  variant="composer"
+                  onRemove={removePendingAttachment}
+                />
+              </View>
+              <View style={styles.composerInputRow}>
                 <Pressable
-                  onPress={handleStop}
                   accessibilityRole="button"
-                  accessibilityLabel="Stop generating"
+                  accessibilityLabel="Add photo, camera capture, or file"
+                  disabled={
+                    !effectiveAiApiKey.trim() ||
+                    !historyHydrated ||
+                    isSessionLoading ||
+                    isMigratingKey
+                  }
+                  onPress={() => setAttachSheetOpen(true)}
                   style={({ pressed }) => [
-                    styles.composerStopButton,
+                    styles.composerAttachButton,
                     {
-                      backgroundColor: colors.error,
-                      opacity: pressed ? 0.88 : 1,
+                      borderColor: colors.border,
+                      backgroundColor: colors.background,
+                      opacity: pressed ? 0.82 : 1,
                     },
                   ]}
                 >
                   <SymbolView
                     name={{
-                      ios: "stop.fill",
-                      android: "stop",
-                      web: "stop",
+                      ios: "plus.circle.fill",
+                      android: "add_circle",
+                      web: "add_circle",
+                    }}
+                    size={26}
+                    tintColor={
+                      !effectiveAiApiKey.trim() || !historyHydrated
+                        ? (colors.secondaryText as string)
+                        : (colors.primary as string)
+                    }
+                  />
+                </Pressable>
+                <TextInput
+                  ref={composerInputRef}
+                  placeholder={
+                    pendingAttachments.length > 0
+                      ? "Add a caption (optional)…"
+                      : "Message or attach files…"
+                  }
+                  placeholderTextColor={colors.placeholder as string}
+                  value={text}
+                  onChangeText={setText}
+                  multiline
+                  textAlignVertical="top"
+                  style={[
+                    styles.input,
+                    {
+                      color: colors.text,
+                    },
+                  ]}
+                  onSubmitEditing={() => {
+                    void handleSend();
+                  }}
+                  returnKeyType="default"
+                />
+                {isGenerating ? (
+                  <Pressable
+                    onPress={handleStop}
+                    accessibilityRole="button"
+                    accessibilityLabel="Stop generating"
+                    style={({ pressed }) => [
+                      styles.composerStopButton,
+                      {
+                        backgroundColor: colors.error,
+                        opacity: pressed ? 0.88 : 1,
+                      },
+                    ]}
+                  >
+                    <SymbolView
+                      name={{
+                        ios: "stop.fill",
+                        android: "stop",
+                        web: "stop",
+                      }}
+                      size={18}
+                      tintColor="#FFFFFF"
+                    />
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  onPress={() => void handleSend()}
+                  disabled={composerSubmitDisabled}
+                  style={({ pressed }) => [
+                    styles.sendButton,
+                    {
+                      backgroundColor: composerSubmitDisabled
+                        ? colors.border
+                        : colors.primary,
+                      opacity: pressed ? 0.9 : 1,
+                    },
+                  ]}
+                  accessibilityLabel={
+                    isGenerating ? "Queue message" : "Send message"
+                  }
+                >
+                  <SymbolView
+                    name={{
+                      ios: "paperplane.fill",
+                      android: "send",
+                      web: "send",
                     }}
                     size={18}
                     tintColor="#FFFFFF"
                   />
                 </Pressable>
-              ) : null}
-              <Pressable
-                onPress={() => void handleSend()}
-                disabled={composerSubmitDisabled}
-                style={({ pressed }) => [
-                  styles.sendButton,
-                  {
-                    backgroundColor: composerSubmitDisabled
-                      ? colors.border
-                      : colors.primary,
-                    opacity: pressed ? 0.9 : 1,
-                  },
-                ]}
-                accessibilityLabel={
-                  isGenerating ? "Queue message" : "Send message"
-                }
-              >
-                <SymbolView
-                  name={{
-                    ios: "paperplane.fill",
-                    android: "send",
-                    web: "send",
-                  }}
-                  size={18}
-                  tintColor="#FFFFFF"
-                />
-              </Pressable>
-            </View>
+              </View>
             {pendingGenerationQueueCount > 0 ? (
               <View style={styles.composerQueueHintWrap}>
                 <AppText
@@ -2078,6 +2345,15 @@ export default function HomeScreen() {
           </Pressable>
         </Animated.View>
       </KeyboardAvoidingView>
+
+      <ChatAttachSheet
+        visible={attachSheetOpen}
+        onClose={() => setAttachSheetOpen(false)}
+        colors={attachChipColors}
+        onPickLibrary={() => void pickFromPhotoLibrary()}
+        onPickCamera={() => void pickFromCamera()}
+        onPickFiles={() => void pickFromFiles()}
+      />
 
       <Modal
         visible={modelPickerOpen}
@@ -2643,13 +2919,26 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 16,
   },
+  composerAttachSection: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+  },
+  composerAttachButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 2,
+  },
   composerInputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 12,
-    paddingLeft: 16,
+    gap: 10,
+    paddingLeft: 12,
     paddingRight: 12,
-    paddingTop: 12,
+    paddingTop: 4,
     paddingBottom: 10,
   },
   input: {

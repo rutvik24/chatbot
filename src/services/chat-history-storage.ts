@@ -198,7 +198,9 @@ async function saveChatHistoryStore(
  */
 function sessionQualifiesForHistory(messages: ChatMessageWithTime[]): boolean {
   return messages.some(
-    (m) => m.role === "user" && m.content.trim().length > 0,
+    (m) =>
+      m.role === "user" &&
+      (m.content.trim().length > 0 || (m.attachments?.length ?? 0) > 0),
   );
 }
 
@@ -208,11 +210,29 @@ function storedSessionQualifiesForHistory(s: StoredChatSession): boolean {
 
 function titleFromMessages(messages: ChatMessageWithTime[]): string {
   const first = messages.find(
-    (m) => m.role === "user" && m.content.trim().length > 0,
+    (m) =>
+      m.role === "user" &&
+      (m.content.trim().length > 0 || (m.attachments?.length ?? 0) > 0),
   );
-  const raw = first?.content.trim() ?? "Chat";
-  if (raw.length <= 56) return raw;
-  return `${raw.slice(0, 53)}…`;
+  const raw = first?.content.trim() ?? "";
+  if (raw) {
+    if (raw.length <= 56) return raw;
+    return `${raw.slice(0, 53)}…`;
+  }
+  const atts = first?.attachments;
+  if (atts?.length) {
+    const a0 = atts[0];
+    const label =
+      a0.kind === "image"
+        ? "Photo"
+        : a0.name.replace(/\.[^/.]+$/, "") || "Document";
+    if (atts.length === 1) return label.length <= 56 ? label : `${label.slice(0, 53)}…`;
+    const suffix = ` +${atts.length - 1}`;
+    const max = 56 - suffix.length;
+    const head = label.length <= max ? label : `${label.slice(0, Math.max(1, max - 1))}…`;
+    return `${head}${suffix}`;
+  }
+  return "Chat";
 }
 
 /**

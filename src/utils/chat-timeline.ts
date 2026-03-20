@@ -2,12 +2,28 @@
  * Chat list rows: real messages plus centered “day” section headers (Today, Yesterday, …).
  */
 
+/** File or image the user attached for the assistant (vision / documents). */
+export type ChatAttachment = {
+  id: string;
+  /** Original display name */
+  name: string;
+  mimeType: string;
+  kind: "image" | "file";
+  /**
+   * Readable URI: `file://` in app sandbox (native), or `data:` URL on web during the session.
+   * Omitted after web persistence sanitize (large payloads) or if the file was removed.
+   */
+  localUri?: string;
+};
+
 export type ChatMessageWithTime = {
   id: string;
   role: "user" | "assistant";
   content: string;
   /** Unix ms when the message was created (user send / assistant placeholder). */
   createdAt: number;
+  /** User-only: images / PDFs / text files sent to the model. */
+  attachments?: ChatAttachment[];
 };
 
 export type ChatTimelineRow =

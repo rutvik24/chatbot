@@ -1,4 +1,4 @@
-import Constants from "expo-constants";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import * as Linking from "expo-linking";
 
 function resolveAppScheme(): string {
@@ -25,9 +25,10 @@ export function buildChatDeepLink(sessionId: string): string {
   const encoded = encodeURIComponent(trimmed);
   const path = `chat/${encoded}`;
 
-  if (Constants.appOwnership === "expo") {
+  if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
     return Linking.createURL(path);
   }
 
   return `${resolveAppScheme()}://chat/${encoded}`;
 }
+

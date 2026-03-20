@@ -178,9 +178,34 @@ function humanLineFromApiErrorBody(body: ErrorBody): string | undefined {
   return userSafeErrorFragment(readNestedMessage(body), 200);
 }
 
+/**
+ * Gateways (e.g. OpenRouter) often put the real provider error JSON in `metadata.raw`
+ * while `message` is only "Provider returned error".
+ */
+function parseProviderMetadataRaw(metadata: unknown): string | undefined {
+  if (!metadata || typeof metadata !== 'object') return undefined;
+  const raw = (metadata as Record<string, unknown>).raw;
+  if (typeof raw !== 'string' || !raw.trim()) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const err = parsed.error;
+    if (err && typeof err === 'object') {
+      const em = (err as Record<string, unknown>).message;
+      if (typeof em === 'string' && em.trim()) return em.trim();
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
 function readNestedMessage(body: ErrorBody): string | undefined {
   if (!body || typeof body !== 'object') return undefined;
   const o = body as Record<string, unknown>;
+
+  const fromWrapped = parseProviderMetadataRaw(o.metadata);
+  if (fromWrapped) return fromWrapped;
+
   if (typeof o.message === 'string' && o.message.trim()) {
     return o.message.trim();
   }
@@ -256,6 +281,25 @@ function friendlyFromRawMessage(raw: string): string | undefined {
   if (lower.includes('timeout') || lower.includes('timed out')) {
     return 'The request timed out. Check your connection and try again.';
   }
+  if (
+    lower.includes('api key not valid') ||
+    lower.includes('invalid api key') ||
+    lower.includes('api_key_invalid') ||
+    lower.includes('incorrect api key')
+  ) {
+    return 'The upstream provider rejected your API key (e.g. Google AI Studio BYOK). Open AI settings and paste a valid key for that provider, or pick another model.';
+  }
+  if (
+    (lower.includes('no endpoints found') &&
+      (lower.includes('image') || lower.includes('vision'))) ||
+    lower.includes('support image input') ||
+    (lower.includes('does not support') &&
+      (lower.includes('image') ||
+        lower.includes('vision') ||
+        lower.includes('multimodal')))
+  ) {
+    return 'This model or provider route doesn’t accept images or vision input. Remove attachments and send again, or choose a vision / multimodal model from the model list.';
+  }
   return undefined;
 }
 
@@ -295,6 +339,14 @@ export function getFriendlyChatProviderError(error: unknown): string {
     return 'Access was denied. Your key may not be allowed to use this model or endpoint.';
   }
   if (error instanceof NotFoundError) {
+    const body = error.error as ErrorBody;
+    const nested = readNestedMessage(body);
+    if (nested) {
+      const fromNested = friendlyFromRawMessage(nested);
+      if (fromNested) return fromNested;
+    }
+    const detail404 = userSafeErrorFragment(nested, 260);
+    if (detail404) return detail404;
     return 'The API returned “not found” (404). Check AI settings: use a full OpenAI-compatible base URL (often ending in /v1) and a model id from the model list.';
   }
   if (error instanceof RateLimitError) {
@@ -335,7 +387,12 @@ export function getFriendlyChatProviderError(error: unknown): string {
     const code = readErrorCode(body);
     const fromCode = code ? friendlyFromProviderCode(code) : undefined;
     if (fromCode) return fromCode;
-    const detail400 = userSafeErrorFragment(readNestedMessage(body), 200);
+    const nested = readNestedMessage(body);
+    if (nested) {
+      const fromNested = friendlyFromRawMessage(nested);
+      if (fromNested) return fromNested;
+    }
+    const detail400 = userSafeErrorFragment(nested, 200);
     if (detail400) {
       return `The request was not accepted: ${detail400}`;
     }
@@ -374,6 +431,13 @@ export function getFriendlyChatProviderError(error: unknown): string {
       return 'Access was denied. Check your API key permissions or model access.';
     }
     if (status === 404) {
+      const nested404 = readNestedMessage(body);
+      if (nested404) {
+        const fromNested = friendlyFromRawMessage(nested404);
+        if (fromNested) return fromNested;
+      }
+      const detail404 = userSafeErrorFragment(nested404, 260);
+      if (detail404) return detail404;
       return 'The API returned “not found” (404). Check AI settings: verify the base URL matches your provider’s API root; pick a valid model from the chat model list.';
     }
     if (status === 429) {

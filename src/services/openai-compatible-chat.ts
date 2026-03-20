@@ -1,8 +1,11 @@
 import { fetch as expoFetch } from 'expo/fetch';
 import OpenAI from 'openai';
 
+import type { ChatCompletionMessageParam } from '@/utils/chat-completion-history';
+
 export type ChatRole = 'system' | 'user' | 'assistant';
 
+/** @deprecated Prefer {@link ChatCompletionMessageParam} for API calls; kept for simple text-only helpers. */
 export type ChatMessage = {
   role: ChatRole;
   content: string;
@@ -118,7 +121,8 @@ export type StreamChatCompletionInput = {
   apiKey: string;
   /** Stored value; empty/null uses {@link DEFAULT_OPENAI_COMPAT_BASE_URL}. */
   baseURL?: string | null;
-  messages: ChatMessage[];
+  /** Same shape as `openai` SDK {@link ChatCompletionMessageParam}[] (text, `image_url`, `file` parts). */
+  messages: ChatCompletionMessageParam[];
   model?: string;
   signal?: AbortSignal;
 };
@@ -136,7 +140,9 @@ export async function* streamChatCompletion({
   const stream = await client.chat.completions.create(
     {
       model,
-      messages,
+      messages: messages as Parameters<
+        OpenAI["chat"]["completions"]["create"]
+      >[0]["messages"],
       stream: true,
     },
     signal ? ({ signal } as any) : undefined

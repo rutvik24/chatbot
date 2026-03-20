@@ -8,6 +8,7 @@ The app talks to an OpenAI-compatible provider via `src/services/openai-compatib
   - the user’s API key
   - the stored base URL (or the default)
   - a message history array (recent turns + optional system personalization)
+- **Attachments (images, PDFs, text files):** the composer lets users add files; history is converted in `src/utils/chat-completion-history.ts` into official **`openai` SDK** `ChatCompletionContentPart` values (`text`, `image_url`, `file` with `file_data` / `filename` per the [npm `openai` package](https://www.npmjs.com/package/openai) and [Chat Completions API](https://platform.openai.com/docs/api-reference/chat)). See **`docs/openai-sdk-file-support.md`**. The chosen **model/provider must support vision and/or file inputs** (many free text-only models will error on multimodal payloads).
 - `streamChatCompletion()` uses the OpenAI SDK with `stream: true`
 - Token deltas are yielded from the streaming response; the UI **buffers** them (~40ms) then appends to the assistant message to limit re-renders
 - A **Stop** button aborts the in-flight request via `AbortController`

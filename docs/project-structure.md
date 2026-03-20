@@ -45,6 +45,8 @@ Auth/settings routes:
 
 Supporting modules:
 
+- `src/utils/chat-completion-history.ts` — maps UI messages to official **`openai`** `ChatCompletionMessageParam` / `ChatCompletionContentPart` (attachments → `image_url`, `file` with `file_data`, or `text`)
+- `src/utils/openai-chat-file-helpers.ts` — `toFile` wrapper for optional `client.files.create` (see **`docs/openai-sdk-file-support.md`**)
 - `src/utils/ai-credentials-storage.ts` — per-account API key, base URL, model id (legacy SecureStore key ids kept for migration)
 - `src/utils/ai-api-key-env.ts` — optional `EXPO_PUBLIC_*` API key fallbacks
 
