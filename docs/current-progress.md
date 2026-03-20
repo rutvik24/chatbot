@@ -1,13 +1,15 @@
 # Current Progress
 
-This document matches the behavior in the repo today (chat, settings, AI, theming).
+This document matches the behavior in the repo today (chat, settings, AI, theming, navigation).
 
 ## Navigation & Screens
 
 Expo Router **Stack** + **guards**:
 
-- **Signed out:** `sign-in`, `sign-up`, `forgot-password`
-- **Signed in:** tabs (**Chat**, **Settings**) and stack settings routes
+- **Signed out:** `sign-in`, `sign-up`, `forgot-password` (each with a **native** stack header, titles in `src/app/_layout.tsx`)
+- **Signed in:** tabs (**Chat**, **Settings**) and stack settings routes (native headers)
+
+**Sign in** is the root of the logged-out stack: **`headerBackVisible: false`** (no back). **Chat / tabs** use `headerShown: false`.
 
 Main routes:
 
@@ -15,12 +17,19 @@ Main routes:
 |--------|---------|
 | `/(tabs)/index` | Chat: streaming replies, composer, model picker strip, scroll / catch-up UX |
 | `/(tabs)/settings` | Profile & AI links, **Appearance** (system / light / dark), sign out, error-boundary test |
-| `/(auth)/settings-ai` | API key, base URL, model hint |
+| `/(auth)/settings-ai` | API key, base URL (scroll; `SafeAreaView` edges bottom/left/right under header) |
 | `/(auth)/settings-profile` | Name fields for personalization system message |
 | `/(auth)/settings-security` | Change password + sign out |
 | `/(auth)/change-password` | Password change |
+| `/(auth)/sign-in` | Sign in (native header, no back) |
+| `/(auth)/sign-up` | Create account |
+| `/(auth)/forgot-password` | Forgot password |
 
-Root `src/app/_layout.tsx`: `ThemePreferenceProvider` → `SessionProvider` → navigation theme + `StatusBar` from resolved light/dark.
+### Root layout (`src/app/_layout.tsx`)
+
+`ThemePreferenceProvider` → `SessionProvider` → `ThemeProvider` (`createAppNavigationTheme(resolvedColorScheme)`) → `Stack` with **functional** `screenOptions={({ theme }) => …}` so headers read live theme colors. **`headerLargeTitleEnabled: false`** globally. iOS: `headerBlurEffect: 'none'` for solid bars; `headerBackButtonDisplayMode: 'generic'` for Back + chevron when space allows.
+
+Auth/settings scroll screens use **`SafeAreaView` `edges={['bottom','left','right']}`** under the native header and iOS **`contentInsetAdjustmentBehavior="automatic"`** on `ScrollView` where applicable.
 
 ## Chat (`/(tabs)/index`)
 
@@ -46,7 +55,7 @@ Root `src/app/_layout.tsx`: `ThemePreferenceProvider` → `SessionProvider` → 
 ## Settings & storage
 
 - AI key + base URL + chat model id: **per account**, secure storage on native, `localStorage` on web.
-- **Theme preference** (`system` / `light` / `dark`): device-local key `app_theme_preference_v1` (same storage abstraction; not a secret).
+- **Theme preference** (`system` / `light` / `dark`): device-local key `app_theme_preference_v1` (same storage abstraction; not a secret). See `src/constants/theme-preference.ts` + `src/ctx/theme-preference-context.tsx`.
 - Legacy global API key migration (see `security-and-secrets.md`).
 
 ## Known gaps

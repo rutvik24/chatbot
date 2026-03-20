@@ -1,19 +1,25 @@
 # Theming
 
-The app uses Expo Router color semantics, optional **user appearance override**, and React Native’s color scheme.
+The app combines a **user appearance override**, React Navigation theme, and semantic colors for screens and components.
 
 ## User appearance (Settings)
 
 **Settings → Appearance** offers:
 
-- **System** — follow the device (`Appearance.setColorScheme('unspecified')`; `null` crashes on Android)
-- **Light** / **Dark** — lock the app (`Appearance.setColorScheme('light' | 'dark')`)
+- **System** — follow the device: `Appearance.setColorScheme('unspecified')`. (**Do not** pass `null` on Android — `AppearanceModule.setColorScheme` requires a non-null style and will crash.)
+- **Light** / **Dark** — lock the app: `Appearance.setColorScheme('light' | 'dark')`
 
 Implementation:
 
-- `src/ctx/theme-preference-context.tsx` — `ThemePreferenceProvider` (wraps near root in `src/app/_layout.tsx`, outside `SessionProvider` so sign-in respects the choice)
+- `src/ctx/theme-preference-context.tsx` — `ThemePreferenceProvider` (wraps near root in `src/app/_layout.tsx`, **outside** `SessionProvider` so sign-in respects the choice)
+- Preference is applied in **`useLayoutEffect`** (before paint) to reduce header/body mismatch on first frame.
 - Preference is stored under `app_theme_preference_v1` via `useStorageState` (SecureStore / `localStorage`)
-- `useThemePreference()` exposes `preference`, `setPreference`, and `resolvedColorScheme` (`light` | `dark`)
+- `useThemePreference()` exposes `preference`, `setPreference`, `resolvedColorScheme` (`light` | `dark`), `isPreferenceReady`
+
+**Resolved scheme** comes from `resolveColorSchemeFromPreference()` in `src/constants/theme-preference.ts`:
+
+- If the user chose **Light** or **Dark**, that wins (stays aligned with `Appearance.setColorScheme` even if `useColorScheme()` is briefly out of sync).
+- If **System**, uses `useColorScheme()` from the hook, then falls back to `Appearance.getColorScheme()` when the hook reports `unspecified` / null-ish.
 
 React Navigation’s `ThemeProvider` and `expo-status-bar` `StatusBar` use **`resolvedColorScheme`** from the same context.
 
@@ -24,9 +30,17 @@ React Navigation’s `ThemeProvider` and `expo-status-bar` `StatusBar` use **`re
 - `background`, `surface`, `text`, `secondaryText`
 - `primary`, `border`, `error`, `success`, `placeholder`
 
-**iOS** uses Expo Router’s `Color.ios.*`. **Android** uses a static Material-style palette from `materialAndroidUiColors()` keyed off `resolvedColorScheme` — `Color.android.dynamic.*` follows **device** night mode and ignores `Appearance.setColorScheme`, which made Light/Dark in Settings look reversed. **Web** uses hex fallbacks.
+**iOS** — Expo Router `Color.ios.*` (system dynamic colors follow `Appearance`).
 
-Components that use these colors should re-render when appearance changes — `useNativeThemeColors()` uses `useThemePreference().resolvedColorScheme` (and still subscribes via `useColorScheme()` for system mode).
+**Android** — `materialAndroidUiColors(isDark)` from `src/utils/navigation-theme.ts`, keyed off **`resolvedColorScheme`**. The app does **not** use `Color.android.dynamic.*` for this chrome: those tokens track **device** night mode and ignore `Appearance.setColorScheme`, which made Light/Dark in Settings look inverted.
+
+**Web** — hex fallbacks keyed off `resolvedColorScheme`.
+
+Components should re-render when appearance changes — `useNativeThemeColors()` depends on `useThemePreference().resolvedColorScheme` and still calls `useColorScheme()` so **System** mode updates when the OS toggles.
+
+## Navigation header colors
+
+`src/app/_layout.tsx` passes `createAppNavigationTheme(resolvedColorScheme)` into `ThemeProvider` and uses **functional** `screenOptions={({ theme }) => ({ … })}` so native stack headers use the same `theme.colors` as the rest of the app. See [`project-structure.md`](project-structure.md).
 
 ## Markdown and chat bubbles
 

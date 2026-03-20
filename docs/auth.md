@@ -19,6 +19,10 @@ This app stores demo credentials on-device:
 - `sign-up`: saves the password and writes a profile record (first/last name) to storage so the chat can personalize immediately.
 - `sign-in`: verifies the email + password combination from the locally stored data.
 
+### Stack UI (logged-out)
+
+Sign-in, sign-up, and forgot-password use the **native stack** header from `src/app/_layout.tsx` (themed title + back where applicable). **Sign-in** is the root of the logged-out stack: **`headerBackVisible: false`**. Scrollable bodies use `SafeAreaView` edges that avoid double top inset under the header (see [`current-progress.md`](current-progress.md)).
+
 ## Forgot password
 
 - `forgotPassword(email)` returns success only if the email exists in the local credential store.

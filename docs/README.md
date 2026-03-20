@@ -10,7 +10,7 @@ This folder contains the developer docs for the project.
 - [`ai-integration.md`](ai-integration.md) - OpenAI-compatible streaming
 - [`auth.md`](auth.md) - current authentication model (demo/local)
 - [`security-and-secrets.md`](security-and-secrets.md) - how API keys are stored and migrated
-- [`theming.md`](theming.md) - native theming strategy with Expo Router colors
+- [`theming.md`](theming.md) - appearance override, Android vs iOS colors, navigation theme
 
 ## Conventions
 
