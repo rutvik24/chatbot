@@ -1,0 +1,6 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- White silhouette for Expo iOS icon tinting + Android monochrome + splash overlay -->
+  <rect x="108" y="308" width="620" height="488" rx="132" ry="132" fill="#FFFFFF" />
+  <rect x="368" y="128" width="548" height="428" rx="118" ry="118" fill="#FFFFFF" />
+  <circle cx="824" cy="212" r="58" fill="#FFFFFF" />
+</svg>

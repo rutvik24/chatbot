@@ -44,8 +44,15 @@ export function AnimatedSplashOverlay() {
           scheduleOnRN(setVisible, false);
         }
       })}
-      style={styles.backgroundSolidColor}
-    />
+      style={styles.splashOverlay}
+    >
+      <Image
+        source={require("@/assets/images/splash-icon.png")}
+        style={styles.splashMark}
+        contentFit="contain"
+        accessibilityLabel="App icon"
+      />
+    </Animated.View>
   );
 }
 
@@ -149,10 +156,16 @@ const styles = StyleSheet.create({
     height: 128,
     position: "absolute",
   },
-  backgroundSolidColor: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: "#208AEF",
+  splashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#2563EB",
     zIndex: 1000,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  splashMark: {
+    width: 220,
+    height: 220,
   },
 });
 
