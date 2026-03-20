@@ -14,5 +14,6 @@ This folder contains the developer docs for the project.
 
 ## Conventions
 
-- Commands below use `bun` (per the project’s tooling).
-- The app uses Expo Router file-based routing, so each route maps to a file in `src/app/`.
+- Commands use **bun** (see [`setup.md`](setup.md)).
+- Expo Router file-based routing: routes live under `src/app/`.
+- **License:** proprietary — see root `LICENSE` (README may summarize features; legal terms are in `LICENSE`).

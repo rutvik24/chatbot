@@ -9,8 +9,13 @@ The app talks to an OpenAI-compatible provider via `src/services/openrouter-chat
   - the stored base URL (or the default)
   - a message history array (recent turns + optional system personalization)
 - `streamChatCompletion()` uses the OpenAI SDK with `stream: true`
-- Token deltas are yielded from the streaming response and appended to the assistant message UI
-- A “Stop” button aborts the in-flight request via `AbortController`
+- Token deltas are yielded from the streaming response; the UI **buffers** them (~40ms) then appends to the assistant message to limit re-renders
+- A **Stop** button aborts the in-flight request via `AbortController`
+
+**Stop / cancel behavior**
+
+- If the user stops before **any** non-empty token (and no pending buffer), the **user message + assistant placeholder** are **removed** from the list and the prompt is put back in the input for editing.
+- If **any** content was streamed (or buffer had text when stopped), the **partial assistant message is kept** and the input is **not** refilled.
 
 Important implementation detail:
 
@@ -23,6 +28,7 @@ The chat screen loads available models via the **OpenAI SDK** `client.models.lis
 - Default when nothing is saved: `meta-llama/llama-3.2-3b-instruct:free` (OpenRouter per-model free tier; avoids the shared `openrouter/free` pool that rate-limits aggressively)
 - The user picks a model from a modal list; the choice is stored per account (secure storage on native, `localStorage` on web)
 - Search filters the list; the current selection is pinned at the top if the API list changes
+- The **model strip** lives **below** the message field inside the composer card
 
 ## Base URL (404 / “not found”)
 
@@ -38,7 +44,7 @@ The OpenAI SDK expects `baseURL` to include the API version segment:
 
 The app supports two ways to get AI credentials:
 
-- Saved per-user credentials from `Settings → AI settings`
+- Saved per-user credentials from **Settings → AI settings**
 - Build-time env defaults:
   - `EXPO_PUBLIC_OPENROUTER_API_KEY`
   - `EXPO_PUBLIC_OPENAI_API_KEY`
@@ -65,9 +71,9 @@ The app normalizes an OpenAI-compatible base URL by:
 
 ## Error handling
 
-Provider/SKD errors are mapped to short, user-facing messages in:
+Provider/SDK errors are mapped to **short, safe** user-facing strings in `src/utils/provider-chat-error.ts`:
 
-- `src/utils/provider-chat-error.ts`
+- No raw JSON, env var names, API keys, or paths in chat copy
+- Full payloads are logged with `logChatProviderError` (Metro / native logs)
 
-The chat UI avoids injecting a “cancelled” error into the conversation when the user intentionally presses Stop.
-
+The chat UI does **not** inject a cancellation error when the user presses **Stop**.

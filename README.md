@@ -16,28 +16,39 @@ Expo Router chat app with per-user OpenAI-compatible AI streaming (OpenRouter by
 
 ## Current Progress (Snapshot)
 
-Implemented features:
-- Authentication flow (sign in / sign up / change password) backed by local demo storage via `src/ctx/auth-context.tsx`.
-- Profile editing in Settings (saved locally per account) via `src/app/(auth)/settings-profile.tsx`.
-- AI Settings screen to store an OpenAI-compatible API key + base URL securely on-device via `src/app/(auth)/settings-ai.tsx`.
-- Chat UI with streaming responses from OpenAI-compatible providers (OpenRouter by default) using `src/services/openrouter-chat.ts`.
-- Markdown rendering for assistant messages, including copy-to-clipboard for code blocks (`src/components/markdown-message.tsx`).
-- Native light/dark theming via Expo Router `Color` (`src/hooks/use-native-theme-colors.ts`).
+### Implemented
 
-Known demo limitations to address next:
-- Auth is a mock (no real backend). Passwords and sessions are stored locally.
-- Forgot password is mocked (no email is sent).
-- Chat messages are currently kept in-memory (no conversation history persistence).
-- Model picker loads models via the OpenAI SDK when you open it (cached ~2 min); default model avoids the shared `openrouter/free` pool (see `DEFAULT_CHAT_MODEL_ID` in `openrouter-chat.ts`).
+- **Authentication** — Sign in / sign up / change password via local demo storage (`src/ctx/auth-context.tsx`).
+- **Profile** — Settings profile for AI personalization (`src/app/(auth)/settings-profile.tsx`).
+- **AI settings** — Per-account OpenAI-compatible API key + base URL (`src/app/(auth)/settings-ai.tsx`); optional build-time env fallback (see `.env.example`).
+- **Appearance** — Settings → **System / Light / Dark**; persisted on-device; uses `Appearance.setColorScheme` via `src/ctx/theme-preference-context.tsx` (applies before and after sign-in).
+- **Chat** (`src/app/(tabs)/index.tsx`):
+  - **Streaming** replies from OpenAI-compatible APIs (`src/services/openrouter-chat.ts`).
+  - **Composer** — Message field first, **model strip** below (sparkles + model id); modal model list with search (SDK `models.list`, ~2 min cache when reopening).
+  - **Messages** — User vs assistant bubbles (markdown for both; user bubble uses `onPrimary` tone), **timestamps**, **day section** headers (Today / Yesterday / date).
+  - **Scroll** — Auto-scroll only when you’re near the bottom; **Catch up / Latest** floating button when scrolled up; sticky follow after Catch up during streaming (instant `scrollToEnd` + layout passes).
+  - **Stop** — Aborts the stream; if **no** assistant text arrived yet, the user+placeholder turn is **removed** and the prompt returns to the input; if **any** tokens arrived, partial reply **stays** and the input is not refilled.
+- **Markdown** — Assistant (and user) content with themed code blocks + Copy (`src/components/markdown-message.tsx`).
+- **Errors** — User-facing provider errors are sanitized (no env names, keys, or JSON dumps in chat); full detail in dev logs (`src/utils/provider-chat-error.ts`).
+- **Theming** — `useNativeThemeColors()` + Expo Router `Color` API; see [`docs/theming.md`](docs/theming.md).
+
+### Known limitations / next steps
+
+- Auth is a **mock** (no real backend). Passwords and sessions are local.
+- Forgot password is **mocked** (no email).
+- **No** persisted conversation history (messages are in-memory on the chat screen).
+- Default model id is `DEFAULT_CHAT_MODEL_ID` in `openrouter-chat.ts` (avoid shared `openrouter/free` pool where possible).
 
 ## Quick Start
 
 1. Install deps
+
 ```bash
 bun install
 ```
 
 2. Start (use your preferred target)
+
 ```bash
 bun run start
 # or
@@ -47,10 +58,11 @@ bun run web
 ```
 
 3. Lint
+
 ```bash
 bun run lint
 ```
 
 ## License
 
-This project is available under the terms of the `LICENSE` file in the repository root (MIT).
+This project is licensed under the **private / proprietary** terms in the [`LICENSE`](LICENSE) file in the repository root (not MIT).

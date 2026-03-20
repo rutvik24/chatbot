@@ -1,59 +1,56 @@
 # Current Progress
 
-This document reflects what’s currently implemented in the repo (based on the existing route files and core services).
+This document matches the behavior in the repo today (chat, settings, AI, theming).
 
 ## Navigation & Screens
 
-The app is split into two main flows using Expo Router guards:
+Expo Router **Stack** + **guards**:
 
-- When signed out: `sign-in`, `sign-up`, `forgot-password`
-- When signed in: `tabs` (Chat + Settings) and protected settings screens
+- **Signed out:** `sign-in`, `sign-up`, `forgot-password`
+- **Signed in:** tabs (**Chat**, **Settings**) and stack settings routes
 
 Main routes:
 
-- `/(tabs)/index`: Chat screen (message composer + streamed assistant replies)
-- `/(tabs)/settings`: Settings list + sign out + error boundary test
-- `/(auth)/settings-ai`: Save/clear OpenAI-compatible API key + base URL
-- `/(auth)/settings-profile`: Edit first/last name for AI personalization
-- `/(auth)/settings-security`: Change password + sign out
-- `/(auth)/change-password`: Password change form
+| Route | Purpose |
+|--------|---------|
+| `/(tabs)/index` | Chat: streaming replies, composer, model picker strip, scroll / catch-up UX |
+| `/(tabs)/settings` | Profile & AI links, **Appearance** (system / light / dark), sign out, error-boundary test |
+| `/(auth)/settings-ai` | API key, base URL, model hint |
+| `/(auth)/settings-profile` | Name fields for personalization system message |
+| `/(auth)/settings-security` | Change password + sign out |
+| `/(auth)/change-password` | Password change |
 
-## AI Chat (Streaming)
+Root `src/app/_layout.tsx`: `ThemePreferenceProvider` → `SessionProvider` → navigation theme + `StatusBar` from resolved light/dark.
 
-The chat screen supports:
+## Chat (`/(tabs)/index`)
 
-- Streaming assistant replies token-by-token (OpenAI-compatible “chat completions” streaming)
-- A “Stop” action that aborts the in-flight request
-- Auto-scroll to the bottom when the user is already near the bottom
-- Rendering assistant messages as Markdown, including copy-to-clipboard for code blocks
+- **Streaming** — OpenAI-compatible `stream: true`; tokens batched ~40ms before UI append for performance.
+- **Stop** — `AbortController`; cancellation is not shown as an error in the bubble.
+  - **No assistant output yet** — last user message + empty assistant row removed; same text restored to the composer (edit/resend).
+  - **Any tokens received** — user + partial assistant messages kept; composer not refilled.
+- **Model** — Modal list from `client.models.list()` when opened; selection stored per account; default model in `DEFAULT_CHAT_MODEL_ID` (`openrouter-chat.ts`).
+- **Scroll** — `shouldAutoScrollRef` + **stick-to-bottom** after send or **Catch up**; `onContentSizeChange` + scheduled `scrollToEnd` while following; wider cancel threshold while generating so layout jitter doesn’t drop follow mode.
+- **Catch up / Latest** — Floating button above the composer when not at bottom; **Catch up** variant while generating; docked with elevation so it stays visible on Android.
+- **UI** — Day pills with calendar icon; message times; user primary bubble vs assistant surface bubble (shadows / elevation); unified composer card (outer shadow, inner clip).
 
-Current prompt strategy:
+## Prompt / history
 
-- The app includes the last ~10 user/assistant turns
-- If Profile data exists, it generates a system message with authoritative user facts (`buildUserPersonalizationSystemMessage`)
+- Last ~**10** user/assistant turns sent to the model.
+- Optional **system** message from profile + session (`buildUserPersonalizationSystemMessage`).
 
-## Authentication (Demo/Local)
+## Authentication (demo / local)
 
-The current authentication system is a demo/local implementation:
+- Credentials and sessions in local storage (`src/ctx/auth-context.tsx`).
+- Forgot password **mocked** (no email).
 
-- Credentials are stored locally and sessions are represented by `session-<email>` (`src/ctx/auth-context.tsx`)
-- Profile is persisted locally so the chat can personalize immediately
-- “Forgot password” is currently mocked (it returns success but does not send an email)
+## Settings & storage
 
-## Settings & Secure Storage
+- AI key + base URL + chat model id: **per account**, secure storage on native, `localStorage` on web.
+- **Theme preference** (`system` / `light` / `dark`): device-local key `app_theme_preference_v1` (same storage abstraction; not a secret).
+- Legacy global API key migration (see `security-and-secrets.md`).
 
-Implemented:
+## Known gaps
 
-- `Settings → AI settings` saves the OpenAI-compatible API key and base URL using secure on-device storage on native
-- Keys are stored per account (email-derived storage key)
-- There is a migration path from a legacy global API key slot to per-account keys
-
-## Known gaps / Next improvements
-
-Based on the current code:
-
-- No conversation history persistence yet (messages are kept in component state only)
-- Chat includes a model picker (OpenAI SDK `models.list` when opened, cached; default free model id in `openrouter-chat.ts`)
-- Forgot password is mocked and needs real backend integration
-- Auth is local-only; production needs a real auth provider and secure credential handling
-
+- No **server** auth or synced history.
+- No **persistent** chat threads (reload loses in-memory messages).
+- Forgot password and auth need a real backend for production.

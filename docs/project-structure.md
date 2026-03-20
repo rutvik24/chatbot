@@ -4,7 +4,7 @@ This project uses Expo Router (file-based routing) and a small set of well-separ
 
 - `src/app/`: route entry points (screens) + root layout
 - `src/components/`: reusable UI components (buttons, inputs, markdown renderer, etc.)
-- `src/ctx/`: app-wide React context (authentication/session)
+- `src/ctx/`: app-wide React context (authentication/session, theme preference)
 - `src/services/`: network + streaming logic for AI
 - `src/utils/`: helpers (storage key builders, env defaults, personalization, error mapping)
 - `src/hooks/`: small state/hooks wrappers (theme + storage)
@@ -14,8 +14,8 @@ This project uses Expo Router (file-based routing) and a small set of well-separ
 Key files:
 - `src/app/_layout.tsx`: root layout; applies theme, splash/toast, session guards, and the global back header.
 - `src/app/(tabs)/_layout.tsx`: tab navigator wrapper (`Chat`, `Settings`).
-- `src/app/(tabs)/index.tsx`: chat screen (composer, streaming assistant messages, stop/send).
-- `src/app/(tabs)/settings.tsx`: settings list (Profile, AI settings, sign out, etc.).
+- `src/app/(tabs)/index.tsx`: chat (streaming, composer + model strip, scroll/catch-up, day sections, timestamps).
+- `src/app/(tabs)/settings.tsx`: settings (Appearance, Profile, AI, sign out, etc.).
 
 Auth/settings routes:
 - `src/app/(auth)/sign-in.tsx`
@@ -40,7 +40,10 @@ Storage key names are derived from:
 - the current session/email
 - a small set of fixed “global” keys for legacy migration.
 
-## Theming (`src/hooks/use-native-theme-colors.ts`)
+## Theming
 
-Theme colors are computed from Expo Router’s `Color` API and re-render when `useColorScheme()` changes.
+- `src/ctx/theme-preference-context.tsx` — persisted system/light/dark + `Appearance.setColorScheme`
+- `src/hooks/use-native-theme-colors.ts` — semantic colors from Expo Router `Color` + `useColorScheme()`
+
+See [`theming.md`](theming.md).
 

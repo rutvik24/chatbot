@@ -27,6 +27,10 @@ The app migrates it to per-account storage and then clears the global slot after
 
 This prevents a “cleared key gets repopulated” effect.
 
+## Theme preference (not a secret)
+
+Appearance choice (system / light / dark) is stored with the same storage helper as other prefs but is **not** sensitive. Key: `app_theme_preference_v1` (see `src/constants/theme-preference.ts`).
+
 ## Env defaults (local dev only)
 
 The app can also fall back to build-time public env vars:
