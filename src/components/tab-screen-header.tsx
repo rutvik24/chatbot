@@ -7,13 +7,19 @@ import { useNativeThemeColors } from "@/hooks/use-native-theme-colors";
 export type TabScreenHeaderProps = {
   /** Shown centered (e.g. Chat, Settings). */
   title: string;
+  /** Optional one-line hint under the title (e.g. Chat only). */
+  subtitle?: string;
   onMenuPress: () => void;
 };
 
 /**
  * Top bar for native tab roots: screen title + drawer menu control.
  */
-export function TabScreenHeader({ title, onMenuPress }: TabScreenHeaderProps) {
+export function TabScreenHeader({
+  title,
+  subtitle,
+  onMenuPress,
+}: TabScreenHeaderProps) {
   useColorScheme();
   const colors = useNativeThemeColors();
 
@@ -44,12 +50,23 @@ export function TabScreenHeader({ title, onMenuPress }: TabScreenHeaderProps) {
           tintColor={colors.text}
         />
       </Pressable>
-      <AppText
-        style={[styles.title, { color: colors.text }]}
-        accessibilityRole="header"
-      >
-        {title}
-      </AppText>
+      <View style={styles.titleCol}>
+        <AppText
+          style={[styles.title, { color: colors.text }]}
+          accessibilityRole="header"
+        >
+          {title}
+        </AppText>
+        {subtitle ? (
+          <AppText
+            muted
+            numberOfLines={1}
+            style={[styles.subtitle, { color: colors.secondaryText }]}
+          >
+            {subtitle}
+          </AppText>
+        ) : null}
+      </View>
       <View style={styles.sideSlot} />
     </View>
   );
@@ -70,10 +87,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  title: {
+  titleCol: {
     flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 0,
+  },
+  title: {
     fontSize: 17,
     fontWeight: "700",
     textAlign: "center",
+  },
+  subtitle: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.2,
+    textAlign: "center",
+    marginTop: 2,
   },
 });

@@ -45,7 +45,7 @@ Auth/settings scroll screens use **`SafeAreaView` `edges={['bottom','left','righ
 - **Model** — Modal list from `client.models.list()` when opened; selection stored per account; default model in `DEFAULT_CHAT_MODEL_ID` (`openai-compatible-chat.ts`).
 - **Scroll** — `shouldAutoScrollRef` + **stick-to-bottom** after send or **Catch up**; `onContentSizeChange` + scheduled `scrollToEnd` while following; wider cancel threshold while generating so layout jitter doesn’t drop follow mode.
 - **Catch up / Latest** — Floating button above the composer when not at bottom; **Catch up** variant while generating; docked with elevation so it stays visible on Android.
-- **UI** — **`TabScreenHeader`** (title + drawer); day pills with calendar icon; message times; user primary bubble vs assistant surface bubble (shadows / elevation); unified composer card (outer shadow, inner clip).
+- **UI** — **`TabScreenHeader`** with optional **subtitle** (Chat: “Streaming · Private on device”); **empty state** (icon orb + welcome copy) when there are no messages; refined **bubbles** (softer tail radii, lighter shadows, `overflow: hidden`); **thinking** row with spinner; **error banner** card + **Open AI settings** CTA when the key is missing; **composer** (larger radii/shadow, 46px send, refreshed placeholder); **model sheet** (Models title + subtitle, search field, filled close); **Catch up / Latest** pill spacing.
 - **New chat** (drawer) — Aborts stream, clears messages/composer/error, closes model picker, resets scroll to top; navigates to Chat tab; if Chat isn’t mounted, reset runs when the screen registers (**`ChatActionsProvider`** pending flag).
 
 ## Settings (`/(main)/(tabs)/settings`)

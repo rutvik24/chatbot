@@ -775,7 +775,11 @@ export default function HomeScreen() {
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
     >
-      <TabScreenHeader title="Chat" onMenuPress={openDrawer} />
+      <TabScreenHeader
+        title="Chat"
+        subtitle="Streaming · Private on device"
+        onMenuPress={openDrawer}
+      />
       <KeyboardAvoidingView
         style={styles.keyboardRoot}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -805,6 +809,48 @@ export default function HomeScreen() {
               }
             }}
             removeClippedSubviews={false}
+            ListEmptyComponent={
+              <View style={styles.emptyChatRoot}>
+                <View
+                  style={[
+                    styles.emptyChatOrb,
+                    {
+                      borderColor: colors.border,
+                      backgroundColor: colors.surface,
+                      ...Platform.select({
+                        ios: {
+                          shadowColor: "#000",
+                          shadowOffset: { width: 0, height: 6 },
+                          shadowOpacity: 0.08,
+                          shadowRadius: 16,
+                        },
+                        android: { elevation: 3 },
+                        default: {},
+                      }),
+                    },
+                  ]}
+                >
+                  <SymbolView
+                    name={{
+                      ios: "text.bubble.fill",
+                      android: "chat",
+                      web: "chat",
+                    }}
+                    size={34}
+                    tintColor={colors.primary}
+                  />
+                </View>
+                <AppText
+                  style={[styles.emptyChatTitle, { color: colors.text }]}
+                >
+                  Start the conversation
+                </AppText>
+                <AppText muted style={styles.emptyChatBody}>
+                  Type a message below. Answers appear word by word. Open the
+                  menu anytime for a new chat or to tune AI settings.
+                </AppText>
+              </View>
+            }
             renderItem={({ item }) =>
               item.kind === "day" ? (
                 <View style={styles.daySection}>
@@ -824,15 +870,15 @@ export default function HomeScreen() {
                           ios: {
                             shadowColor: "#000",
                             shadowOffset: { width: 0, height: 2 },
-                            shadowOpacity: 0.1,
-                            shadowRadius: 8,
+                            shadowOpacity: 0.06,
+                            shadowRadius: 10,
                           },
-                          android: { elevation: 6 },
+                          android: { elevation: 4 },
                           default: {
                             shadowColor: "#000",
                             shadowOffset: { width: 0, height: 2 },
-                            shadowOpacity: 0.08,
-                            shadowRadius: 6,
+                            shadowOpacity: 0.05,
+                            shadowRadius: 8,
                           },
                         }),
                       },
@@ -844,8 +890,8 @@ export default function HomeScreen() {
                         android: "calendar_today",
                         web: "calendar_today",
                       }}
-                      size={15}
-                      tintColor={colors.secondaryText}
+                      size={16}
+                      tintColor={colors.primary}
                     />
                     <AppText
                       style={[
@@ -880,45 +926,47 @@ export default function HomeScreen() {
                             backgroundColor: colors.primary,
                             borderWidth: 0,
                             borderTopLeftRadius: 22,
-                            borderTopRightRadius: 2,
+                            borderTopRightRadius: 8,
                             borderBottomLeftRadius: 22,
                             borderBottomRightRadius: 22,
+                            overflow: "hidden",
                             ...Platform.select({
                               ios: {
                                 shadowColor: colors.primary,
-                                shadowOffset: { width: 0, height: 5 },
-                                shadowOpacity: 0.38,
-                                shadowRadius: 14,
+                                shadowOffset: { width: 0, height: 4 },
+                                shadowOpacity: 0.25,
+                                shadowRadius: 12,
                               },
-                              android: { elevation: 12 },
+                              android: { elevation: 10 },
                               default: {
                                 shadowColor: "#2563EB",
-                                shadowOffset: { width: 0, height: 4 },
-                                shadowOpacity: 0.3,
-                                shadowRadius: 12,
+                                shadowOffset: { width: 0, height: 3 },
+                                shadowOpacity: 0.22,
+                                shadowRadius: 10,
                               },
                             }),
                           }
                         : {
                             backgroundColor: colors.surface,
                             borderColor: colors.border,
-                            borderTopLeftRadius: 2,
+                            borderTopLeftRadius: 8,
                             borderTopRightRadius: 22,
                             borderBottomLeftRadius: 22,
                             borderBottomRightRadius: 22,
+                            overflow: "hidden",
                             ...Platform.select({
                               ios: {
                                 shadowColor: "#000",
-                                shadowOffset: { width: 0, height: 4 },
-                                shadowOpacity: 0.14,
-                                shadowRadius: 16,
+                                shadowOffset: { width: 0, height: 3 },
+                                shadowOpacity: 0.1,
+                                shadowRadius: 14,
                               },
-                              android: { elevation: 8 },
+                              android: { elevation: 6 },
                               default: {
                                 shadowColor: "#000",
-                                shadowOffset: { width: 0, height: 3 },
-                                shadowOpacity: 0.12,
-                                shadowRadius: 12,
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.08,
+                                shadowRadius: 10,
                               },
                             }),
                           },
@@ -926,14 +974,20 @@ export default function HomeScreen() {
                   >
                     {item.role === "assistant" &&
                     (!item.content || item.content === "...") ? (
-                      <AppText
-                        style={[
-                          styles.assistantThinking,
-                          { color: colors.secondaryText },
-                        ]}
-                      >
-                        Thinking…
-                      </AppText>
+                      <View style={styles.thinkingRow}>
+                        <ActivityIndicator
+                          size="small"
+                          color={colors.secondaryText as string}
+                        />
+                        <AppText
+                          style={[
+                            styles.assistantThinking,
+                            { color: colors.secondaryText },
+                          ]}
+                        >
+                          Thinking…
+                        </AppText>
+                      </View>
                     ) : (
                       <MarkdownMessage
                         tone={item.role === "user" ? "onPrimary" : "default"}
@@ -980,7 +1034,7 @@ export default function HomeScreen() {
             <View style={styles.composerInputRow}>
               <TextInput
                 ref={composerInputRef}
-                placeholder="Message…"
+                placeholder="Message the assistant…"
                 placeholderTextColor={colors.placeholder as string}
                 value={text}
                 onChangeText={setText}
@@ -1131,22 +1185,56 @@ export default function HomeScreen() {
           </View>
 
           {error ? (
-            <AppText style={[styles.errorText, { color: colors.primary }]}>
-              {error}
-            </AppText>
-          ) : null}
-          {error ===
-          "API key for your account is missing. Add it in AI settings." ? (
-            <Pressable
-              onPress={() => router.push("/settings-ai")}
-              style={styles.errorLink}
+            <View
+              style={[
+                styles.errorBanner,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
             >
-              <AppText
-                style={[styles.errorLinkText, { color: colors.primary }]}
-              >
-                Enter API key
-              </AppText>
-            </Pressable>
+              <SymbolView
+                name={{
+                  ios: "exclamationmark.triangle.fill",
+                  android: "warning",
+                  web: "warning",
+                }}
+                size={20}
+                tintColor={colors.primary}
+              />
+              <View style={styles.errorBannerTextCol}>
+                <AppText
+                  style={[styles.errorBannerBody, { color: colors.text }]}
+                >
+                  {error}
+                </AppText>
+                {error ===
+                "API key for your account is missing. Add it in AI settings." ? (
+                  <Pressable
+                    onPress={() => router.push("/settings-ai")}
+                    style={styles.errorBannerCta}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open AI settings"
+                  >
+                    <AppText
+                      style={[styles.errorBannerCtaText, { color: colors.primary }]}
+                    >
+                      Open AI settings
+                    </AppText>
+                    <SymbolView
+                      name={{
+                        ios: "chevron.right",
+                        android: "chevron_right",
+                        web: "chevron_right",
+                      }}
+                      size={14}
+                      tintColor={colors.primary}
+                    />
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
           ) : null}
         </View>
 
@@ -1246,20 +1334,27 @@ export default function HomeScreen() {
             ]}
           >
             <View style={styles.modalHeader}>
-              <AppText style={[styles.modalTitle, { color: colors.text }]}>
-                Select model
-              </AppText>
+              <View style={styles.modalHeaderTextCol}>
+                <AppText style={[styles.modalTitle, { color: colors.text }]}>
+                  Models
+                </AppText>
+                <AppText muted style={styles.modalSubtitle}>
+                  Pick which model receives your messages
+                </AppText>
+              </View>
               <Pressable
                 onPress={() => {
                   setModelPickerOpen(false);
                   setModelSearch("");
                 }}
                 hitSlop={8}
+                style={styles.modalCloseBtn}
+                accessibilityLabel="Close model picker"
               >
                 <SymbolView
-                  name={{ ios: "xmark", android: "close", web: "close" }}
-                  size={18}
-                  tintColor={colors.text}
+                  name={{ ios: "xmark.circle.fill", android: "close", web: "close" }}
+                  size={28}
+                  tintColor={colors.secondaryText}
                 />
               </Pressable>
             </View>
@@ -1377,7 +1472,6 @@ export default function HomeScreen() {
                               }}
                               size={14}
                               tintColor="#FFFFFF"
-                              weight="bold"
                             />
                           </View>
                         ) : null}
@@ -1428,8 +1522,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     borderRadius: 999,
   },
   jumpFabGenerating: {
@@ -1443,16 +1537,47 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.2,
   },
+  emptyChatRoot: {
+    flexGrow: 1,
+    minHeight: 280,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 28,
+    paddingVertical: 40,
+    gap: 16,
+  },
+  emptyChatOrb: {
+    width: 96,
+    height: 96,
+    borderRadius: 32,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyChatTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+    textAlign: "center",
+  },
+  emptyChatBody: {
+    fontSize: 15,
+    lineHeight: 23,
+    fontWeight: "500",
+    textAlign: "center",
+    maxWidth: 320,
+  },
   messagesContent: {
-    paddingHorizontal: 14,
-    paddingTop: 20,
-    paddingBottom: 16,
-    gap: 14,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 20,
+    gap: 16,
+    flexGrow: 1,
   },
   daySection: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
+    paddingVertical: 14,
     width: "100%",
     gap: 12,
   },
@@ -1466,20 +1591,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
     maxWidth: "78%",
   },
   daySectionLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 0.2,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
   },
   messageColumn: {
-    maxWidth: "88%",
-    gap: 6,
+    maxWidth: "90%",
+    gap: 8,
   },
   messageColumnUser: {
     alignSelf: "flex-end",
@@ -1491,78 +1617,100 @@ const styles = StyleSheet.create({
   },
   messageBubble: {
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  thinkingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 2,
   },
   assistantThinking: {
     fontSize: 15,
     fontStyle: "italic",
-    fontWeight: "500",
+    fontWeight: "600",
     lineHeight: 22,
   },
   messageTime: {
     fontSize: 11,
-    fontWeight: "600",
-    paddingHorizontal: 6,
-    opacity: 0.92,
+    fontWeight: "700",
+    paddingHorizontal: 8,
+    opacity: 0.85,
     fontVariant: ["tabular-nums"],
   },
-  errorText: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    fontSize: 13,
-    fontWeight: "600",
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  errorLink: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+  errorBannerTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 10,
   },
-  errorLinkText: {
+  errorBannerBody: {
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "600",
+    lineHeight: 20,
+  },
+  errorBannerCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+  },
+  errorBannerCtaText: {
+    fontSize: 15,
+    fontWeight: "800",
   },
   /**
    * Outer: shadow / elevation only — no overflow:hidden so iOS draws the shadow.
    * Inner: clips children to the same corner radius.
    */
   composerCardOuter: {
-    marginHorizontal: 12,
-    marginBottom: 10,
-    borderRadius: 20,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 24,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.12,
+        shadowRadius: 20,
       },
-      android: { elevation: 10 },
+      android: { elevation: 12 },
       default: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 14,
       },
     }),
   },
   composerCardInner: {
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: "hidden",
-    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   composerModelStrip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 12,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   composerModelIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1572,14 +1720,14 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   composerModelCaption: {
-    fontSize: 11,
-    fontWeight: "600",
-    letterSpacing: 0.3,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   composerModelName: {
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   composerInlineHintWrap: {
     paddingHorizontal: 14,
@@ -1594,25 +1742,25 @@ const styles = StyleSheet.create({
   composerInputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 10,
-    paddingLeft: 14,
-    paddingRight: 10,
-    paddingTop: 10,
-    paddingBottom: 8,
+    gap: 12,
+    paddingLeft: 16,
+    paddingRight: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
   },
   input: {
     flex: 1,
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 17,
+    lineHeight: 24,
     paddingVertical: 10,
     paddingRight: 4,
-    minHeight: 44,
-    maxHeight: 128,
+    minHeight: 48,
+    maxHeight: 140,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1634,23 +1782,38 @@ const styles = StyleSheet.create({
   },
   modalHeader: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    alignItems: "flex-start",
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 8,
     gap: 12,
   },
-  modalTitle: {
+  modalHeaderTextCol: {
     flex: 1,
-    fontSize: 18,
+    minWidth: 0,
+    gap: 4,
+  },
+  modalTitle: {
+    fontSize: 22,
     fontWeight: "800",
+    letterSpacing: -0.4,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 18,
+  },
+  modalCloseBtn: {
+    marginTop: 2,
+    padding: 4,
   },
   modelSearchInput: {
-    marginHorizontal: 12,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
     fontSize: 16,
   },
   modalLoading: {
