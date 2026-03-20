@@ -108,7 +108,16 @@ export default function HomeScreen() {
   const [bottomChromeHeight, setBottomChromeHeight] = useState(240);
   /** While true, ignore scroll-away updates so the jump FAB doesn’t flicker during animated scroll-to-end. */
   const jumpScrollLockUntilRef = useRef(0);
+  /**
+   * After “Catch up” or send: keep `shouldAutoScrollRef` true while the stream grows until the user
+   * scrolls up past ~200px from the end or generation ends.
+   */
+  const stickToBottomRef = useRef(false);
+  const STICK_TO_BOTTOM_CANCEL_PX = 200;
+  /** While generating + pinned, ignore small layout jumps so we don’t drop follow mode. */
+  const STICK_CANCEL_WHILE_GENERATING_PX = 560;
   const prevScrolledAwayRef = useRef(false);
+  const isGeneratingRef = useRef(false);
   const [showJumpToBottomFab, setShowJumpToBottomFab] = useState(false);
   const fabOpacity = useRef(new Animated.Value(0)).current;
   const fabTranslateY = useRef(new Animated.Value(12)).current;
@@ -159,9 +168,28 @@ export default function HomeScreen() {
     ],
   );
 
+  useEffect(() => {
+    isGeneratingRef.current = isGenerating;
+  }, [isGenerating]);
+
   const scrollToEndIfPinned = useCallback(() => {
     if (!shouldAutoScrollRef.current) return;
-    listRef.current?.scrollToEnd({ animated: true });
+    const instant =
+      stickToBottomRef.current || isGeneratingRef.current;
+    listRef.current?.scrollToEnd({ animated: !instant });
+  }, []);
+
+  /** After markdown height changes, layout can lag one frame — snap scroll without animation. */
+  const scheduleScrollToEndAfterLayout = useCallback(() => {
+    if (!shouldAutoScrollRef.current) return;
+    const run = () => {
+      if (!shouldAutoScrollRef.current) return;
+      listRef.current?.scrollToEnd({ animated: false });
+    };
+    queueMicrotask(run);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(run);
+    });
   }, []);
 
   useEffect(() => {
@@ -187,13 +215,38 @@ export default function HomeScreen() {
   }, [fabOpacity, fabTranslateY, showJumpToBottomFab]);
 
   const jumpToBottomAnimated = useCallback(() => {
+    stickToBottomRef.current = true;
     shouldAutoScrollRef.current = true;
     isAtBottomRef.current = true;
     prevScrolledAwayRef.current = false;
-    jumpScrollLockUntilRef.current = Date.now() + 450;
+    jumpScrollLockUntilRef.current = Date.now() + 900;
     setShowJumpToBottomFab(false);
-    listRef.current?.scrollToEnd({ animated: true });
+    const list = listRef.current;
+    if (!list) return;
+    list.scrollToEnd({ animated: false });
+    requestAnimationFrame(() => {
+      list.scrollToEnd({ animated: false });
+      requestAnimationFrame(() => {
+        list.scrollToEnd({ animated: false });
+      });
+    });
   }, []);
+
+  const wasGeneratingRef = useRef(false);
+  useEffect(() => {
+    if (isGenerating) {
+      wasGeneratingRef.current = true;
+      return;
+    }
+    if (!wasGeneratingRef.current) {
+      return;
+    }
+    wasGeneratingRef.current = false;
+    const id = setTimeout(() => {
+      stickToBottomRef.current = false;
+    }, 200);
+    return () => clearTimeout(id);
+  }, [isGenerating]);
 
   const updateJumpFabFromScrollEvent = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -207,12 +260,37 @@ export default function HomeScreen() {
         contentSize.height - (contentOffset.y + layoutMeasurement.height);
       const atBottom = distanceFromBottom <= scrollBottomThreshold;
       isAtBottomRef.current = atBottom;
-      shouldAutoScrollRef.current = atBottom;
 
-      if (Date.now() < jumpScrollLockUntilRef.current) {
+      const now = Date.now();
+      if (now < jumpScrollLockUntilRef.current) {
+        if (atBottom) {
+          shouldAutoScrollRef.current = true;
+        }
         return;
       }
-      const scrolledAway = !atBottom;
+
+      const stickCancelPx =
+        stickToBottomRef.current && isGeneratingRef.current
+          ? STICK_CANCEL_WHILE_GENERATING_PX
+          : STICK_TO_BOTTOM_CANCEL_PX;
+
+      if (stickToBottomRef.current) {
+        if (distanceFromBottom > stickCancelPx) {
+          stickToBottomRef.current = false;
+          shouldAutoScrollRef.current = false;
+        } else {
+          shouldAutoScrollRef.current = true;
+        }
+      } else {
+        shouldAutoScrollRef.current = atBottom;
+      }
+
+      const scrolledAway = atBottom
+        ? false
+        : stickToBottomRef.current
+          ? distanceFromBottom > stickCancelPx
+          : true;
+
       if (prevScrolledAwayRef.current !== scrolledAway) {
         prevScrolledAwayRef.current = scrolledAway;
         setShowJumpToBottomFab(scrolledAway);
@@ -407,13 +485,17 @@ export default function HomeScreen() {
 
   const appendAssistantToken = (assistantId: string, tokenBuffer: string) => {
     if (!tokenBuffer) return;
+    const follow =
+      shouldAutoScrollRef.current &&
+      (stickToBottomRef.current || isGeneratingRef.current);
     setMessages((previous) =>
       previous.map((m) =>
         m.id === assistantId ? { ...m, content: m.content + tokenBuffer } : m,
       ),
     );
-    // Scrolling is handled in onContentSizeChange when shouldAutoScrollRef is true
-    // (runs after layout so height includes new tokens).
+    if (follow) {
+      scheduleScrollToEndAfterLayout();
+    }
   };
 
   const handleSend = async () => {
@@ -426,13 +508,6 @@ export default function HomeScreen() {
       return;
     }
 
-    // Reset to default behavior: when user sends a new message, we should
-    // auto-scroll back to the end and keep streaming in view.
-    shouldAutoScrollRef.current = true;
-    isAtBottomRef.current = true;
-    prevScrolledAwayRef.current = false;
-    setShowJumpToBottomFab(false);
-
     // Wait for key storage unless an env default is available.
     if (isKeyLoading && !resolveOpenRouterApiKey(storedOpenRouterKey).trim()) {
       return;
@@ -444,6 +519,13 @@ export default function HomeScreen() {
     }
 
     setError(null);
+
+    // Pin to bottom for the whole reply (same idea as “Catch up” during streaming).
+    shouldAutoScrollRef.current = true;
+    isAtBottomRef.current = true;
+    stickToBottomRef.current = true;
+    prevScrolledAwayRef.current = false;
+    setShowJumpToBottomFab(false);
 
     const runId = ++generationRunIdRef.current;
 
@@ -626,7 +708,15 @@ export default function HomeScreen() {
             onScrollEndDrag={updateJumpFabFromScrollEvent}
             onMomentumScrollEnd={updateJumpFabFromScrollEvent}
             scrollEventThrottle={16}
-            onContentSizeChange={scrollToEndIfPinned}
+            onContentSizeChange={() => {
+              scrollToEndIfPinned();
+              if (
+                shouldAutoScrollRef.current &&
+                (stickToBottomRef.current || isGeneratingRef.current)
+              ) {
+                scheduleScrollToEndAfterLayout();
+              }
+            }}
             removeClippedSubviews={false}
             renderItem={({ item }) =>
               item.kind === "day" ? (
@@ -646,11 +736,17 @@ export default function HomeScreen() {
                         ...Platform.select({
                           ios: {
                             shadowColor: "#000",
-                            shadowOffset: { width: 0, height: 1 },
-                            shadowOpacity: 0.06,
-                            shadowRadius: 4,
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.1,
+                            shadowRadius: 8,
                           },
-                          default: { elevation: 1 },
+                          android: { elevation: 6 },
+                          default: {
+                            shadowColor: "#000",
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: 0.08,
+                            shadowRadius: 6,
+                          },
                         }),
                       },
                     ]}
@@ -703,16 +799,16 @@ export default function HomeScreen() {
                             ...Platform.select({
                               ios: {
                                 shadowColor: colors.primary,
-                                shadowOffset: { width: 0, height: 3 },
-                                shadowOpacity: 0.28,
-                                shadowRadius: 8,
+                                shadowOffset: { width: 0, height: 5 },
+                                shadowOpacity: 0.38,
+                                shadowRadius: 14,
                               },
-                              android: { elevation: 3 },
+                              android: { elevation: 12 },
                               default: {
                                 shadowColor: "#2563EB",
-                                shadowOffset: { width: 0, height: 2 },
-                                shadowOpacity: 0.22,
-                                shadowRadius: 6,
+                                shadowOffset: { width: 0, height: 4 },
+                                shadowOpacity: 0.3,
+                                shadowRadius: 12,
                               },
                             }),
                           }
@@ -726,16 +822,16 @@ export default function HomeScreen() {
                             ...Platform.select({
                               ios: {
                                 shadowColor: "#000",
-                                shadowOffset: { width: 0, height: 2 },
-                                shadowOpacity: 0.07,
-                                shadowRadius: 10,
+                                shadowOffset: { width: 0, height: 4 },
+                                shadowOpacity: 0.14,
+                                shadowRadius: 16,
                               },
-                              android: { elevation: 2 },
+                              android: { elevation: 8 },
                               default: {
                                 shadowColor: "#000",
-                                shadowOffset: { width: 0, height: 1 },
-                                shadowOpacity: 0.08,
-                                shadowRadius: 8,
+                                shadowOffset: { width: 0, height: 3 },
+                                shadowOpacity: 0.12,
+                                shadowRadius: 12,
                               },
                             }),
                           },
@@ -784,15 +880,16 @@ export default function HomeScreen() {
             if (h > 0) setBottomChromeHeight(h);
           }}
         >
-          <View
-            style={[
-              styles.composerCard,
-              {
-                borderColor: colors.border,
-                backgroundColor: colors.surface,
-              },
-            ]}
-          >
+          <View style={styles.composerCardOuter}>
+            <View
+              style={[
+                styles.composerCardInner,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: colors.surface,
+                },
+              ]}
+            >
             <View style={styles.composerInputRow}>
               <TextInput
                 ref={composerInputRef}
@@ -943,6 +1040,7 @@ export default function HomeScreen() {
                 />
               )}
             </Pressable>
+            </View>
           </View>
 
           {error ? (
@@ -970,7 +1068,7 @@ export default function HomeScreen() {
           pointerEvents={showJumpToBottomFab ? "box-none" : "none"}
           style={[
             styles.jumpFabDock,
-            Platform.OS === "android" ? { elevation: 24 } : null,
+            Platform.OS === "android" ? { elevation: 32 } : null,
             {
               bottom: bottomChromeHeight + 10,
               opacity: fabOpacity,
@@ -997,16 +1095,16 @@ export default function HomeScreen() {
                 ...Platform.select({
                   ios: {
                     shadowColor: "#000",
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: isGenerating ? 0.14 : 0.1,
-                    shadowRadius: isGenerating ? 10 : 8,
+                    shadowOffset: { width: 0, height: 3 },
+                    shadowOpacity: isGenerating ? 0.2 : 0.14,
+                    shadowRadius: isGenerating ? 14 : 12,
                   },
-                  android: { elevation: isGenerating ? 8 : 6 },
+                  android: { elevation: isGenerating ? 14 : 12 },
                   default: {
                     shadowColor: "#000",
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.12,
-                    shadowRadius: 8,
+                    shadowOffset: { width: 0, height: 3 },
+                    shadowOpacity: 0.14,
+                    shadowRadius: 10,
                   },
                 }),
               },
@@ -1336,18 +1434,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
   },
-  /** Single card: message field + send, then model strip — input first, model below. */
-  composerCard: {
+  /**
+   * Outer: shadow / elevation only — no overflow:hidden so iOS draws the shadow.
+   * Inner: clips children to the same corner radius.
+   */
+  composerCardOuter: {
     marginHorizontal: 12,
     marginBottom: 10,
-    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderRadius: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+      },
+      android: { elevation: 10 },
+      default: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+      },
+    }),
+  },
+  composerCardInner: {
     borderRadius: 20,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    borderWidth: StyleSheet.hairlineWidth * 2,
   },
   composerModelStrip: {
     flexDirection: "row",

@@ -1,6 +1,11 @@
 import { Color } from 'expo-router';
 import { Platform, useColorScheme } from 'react-native';
 
+/**
+ * Semantic colors from the Expo Router `Color` API (iOS/Android) with web fallbacks.
+ * Follows `useColorScheme()` after the user’s choice is applied via `Appearance.setColorScheme`
+ * (see Settings → Appearance and `ThemePreferenceProvider`).
+ */
 export function useNativeThemeColors() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';

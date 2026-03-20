@@ -4,17 +4,22 @@ import {
   ThemeProvider,
 } from "@react-navigation/native";
 import { SplashScreen, Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { SymbolView } from "expo-symbols";
 import { useEffect } from "react";
 import { Pressable, StyleSheet, useColorScheme, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import ErrorBoundary from "@/components/error-boundary";
 import { AppText } from "@/components/common";
 import ToastOverlay from "@/components/toast-overlay";
 import { SessionProvider, useSession } from "@/ctx/auth-context";
+import {
+  ThemePreferenceProvider,
+  useThemePreference,
+} from "@/ctx/theme-preference-context";
 import { useNativeThemeColors } from "@/hooks/use-native-theme-colors";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -24,24 +29,27 @@ function asHeaderColor(value: unknown, fallback: string) {
 
 export default function RootLayout() {
   return (
-    <SessionProvider>
-      <ErrorBoundary>
-        <RootNavigator />
-      </ErrorBoundary>
-    </SessionProvider>
+    <ThemePreferenceProvider>
+      <SessionProvider>
+        <ErrorBoundary>
+          <RootNavigator />
+        </ErrorBoundary>
+      </SessionProvider>
+    </ThemePreferenceProvider>
   );
 }
 
 function RootNavigator() {
-  const colorScheme = useColorScheme();
+  useColorScheme();
+  const { resolvedColorScheme } = useThemePreference();
   const colors = useNativeThemeColors();
   const headerBackground = asHeaderColor(
     colors.background,
-    colorScheme === "dark" ? "#000000" : "#FFFFFF",
+    resolvedColorScheme === "dark" ? "#000000" : "#FFFFFF",
   );
   const headerText = asHeaderColor(
     colors.text,
-    colorScheme === "dark" ? "#FFFFFF" : "#111827",
+    resolvedColorScheme === "dark" ? "#FFFFFF" : "#111827",
   );
   const compactHeaderStyle = {
     backgroundColor: headerBackground,
@@ -55,7 +63,12 @@ function RootNavigator() {
   }, [isLoading]);
 
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+    <ThemeProvider
+      value={resolvedColorScheme === "dark" ? DarkTheme : DefaultTheme}
+    >
+      <StatusBar
+        style={resolvedColorScheme === "dark" ? "light" : "dark"}
+      />
       <AnimatedSplashOverlay />
       <ToastOverlay />
       <Stack

@@ -5,7 +5,9 @@ import { Modal, Pressable, SectionList, StyleSheet, View, useColorScheme } from 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/common';
+import type { ThemePreference } from '@/constants/theme-preference';
 import { useSession } from '@/ctx/auth-context';
+import { useThemePreference } from '@/ctx/theme-preference-context';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 
 type SettingsItem = {
@@ -13,9 +15,24 @@ type SettingsItem = {
   href: '/settings-profile' | '/settings-ai';
 };
 
+const THEME_OPTIONS: {
+  value: ThemePreference;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    value: 'system',
+    label: 'System',
+    hint: 'Match device light or dark mode',
+  },
+  { value: 'light', label: 'Light', hint: 'Always use light appearance' },
+  { value: 'dark', label: 'Dark', hint: 'Always use dark appearance' },
+];
+
 export default function SettingsScreen() {
   useColorScheme();
   const colors = useNativeThemeColors();
+  const { preference, setPreference } = useThemePreference();
   const { signOut } = useSession();
   const [isSignOutModalVisible, setIsSignOutModalVisible] = useState(false);
   const [shouldTestBoundary, setShouldTestBoundary] = useState(false);
@@ -41,6 +58,68 @@ export default function SettingsScreen() {
         sections={sections}
         keyExtractor={(item) => item.href}
         contentContainerStyle={styles.listContent}
+        ListHeaderComponent={
+          <View style={styles.themeBlock}>
+            <AppText style={styles.sectionTitle}>Appearance</AppText>
+            <View
+              style={[
+                styles.themeCard,
+                { borderColor: colors.border, backgroundColor: colors.surface },
+              ]}
+            >
+              {THEME_OPTIONS.map((opt, index) => {
+                const selected = preference === opt.value;
+                const isLast = index === THEME_OPTIONS.length - 1;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`${opt.label}. ${opt.hint}`}
+                    onPress={() => setPreference(opt.value)}
+                    style={({ pressed }) => [
+                      styles.themeRow,
+                      {
+                        borderColor: colors.border,
+                        borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
+                        backgroundColor: pressed
+                          ? colors.background
+                          : 'transparent',
+                      },
+                    ]}
+                  >
+                    <View style={styles.themeRowText}>
+                      <AppText
+                        style={{
+                          fontWeight: selected ? '800' : '600',
+                          color: colors.text,
+                        }}
+                      >
+                        {opt.label}
+                      </AppText>
+                      <AppText muted style={styles.themeHint}>
+                        {opt.hint}
+                      </AppText>
+                    </View>
+                    {selected ? (
+                      <SymbolView
+                        name={{
+                          ios: 'checkmark.circle.fill',
+                          android: 'check_circle',
+                          web: 'check_circle',
+                        }}
+                        size={22}
+                        tintColor={colors.primary}
+                      />
+                    ) : (
+                      <View style={styles.themeCheckPlaceholder} />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        }
         renderSectionHeader={({ section }) => (
           <AppText style={styles.sectionTitle}>{section.title}</AppText>
         )}
@@ -138,6 +217,35 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 16,
     gap: 10,
+  },
+  themeBlock: {
+    marginBottom: 8,
+    gap: 8,
+  },
+  themeCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  themeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  themeRowText: {
+    flex: 1,
+    gap: 4,
+  },
+  themeHint: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  themeCheckPlaceholder: {
+    width: 22,
+    height: 22,
   },
   sectionTitle: {
     fontSize: 16,
