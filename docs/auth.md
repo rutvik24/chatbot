@@ -24,6 +24,8 @@ This app stores demo credentials on-device:
 
 Sign-in, sign-up, and forgot-password use the **native stack** header from `src/app/_layout.tsx` (themed title + back where applicable). **Sign-in** is the root of the logged-out stack: **`headerBackVisible: false`**. Scrollable bodies use `SafeAreaView` edges that avoid double top inset under the header (see [`current-progress.md`](current-progress.md)).
 
+Shared layout pieces live in **`src/components/auth/`** (`AuthFormCard`, `AuthHero`, `AuthFeedbackBanner`, footer links, scroll padding) so all auth forms share the same elevated card, typography, and feedback styling. **`settings-security`** uses the same primitives for consistency with change-password.
+
 ## Forgot password
 
 - `forgotPassword(email)` returns success only if the email exists in the local credential store.

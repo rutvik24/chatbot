@@ -3,7 +3,7 @@
 This project uses Expo Router (file-based routing) and a small set of well-separated layers:
 
 - `src/app/`: route entry points (screens) + root layout
-- `src/components/`: reusable UI components (buttons, inputs, markdown renderer, native tabs wrapper, **tab screen header**, drawer content, etc.)
+- `src/components/`: reusable UI components (buttons, inputs, markdown renderer, native tabs wrapper, **tab screen header**, drawer content, **`auth/`** shared auth form layout, etc.)
 - `src/ctx/`: app-wide React context (authentication/session, theme preference, **chat actions** for drawer → new chat)
 - `src/services/`: network + streaming logic for AI
 - `src/utils/`: helpers (AI credentials storage, env defaults, navigation theme, personalization, **`session-email`** for display labels, error mapping)

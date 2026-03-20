@@ -3,7 +3,6 @@ import { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   View,
@@ -11,12 +10,26 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppButton, AppText, AppTextInput, AuthIllustration } from '@/components/common';
+import {
+  AUTH_PRIMARY_BUTTON_STYLE,
+  authScrollContentStyle,
+  AuthFeedbackBanner,
+  AuthFormCard,
+  AuthHero,
+  AuthTextButton,
+} from '@/components/auth';
+import { AppButton, AppTextInput, AuthIllustration } from '@/components/common';
 import { useSession } from '@/ctx/auth-context';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 import { showToast } from '@/utils/toast-bus';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const HERO_ICON = {
+  ios: 'key.horizontal.fill' as const,
+  android: 'vpn_key' as const,
+  web: 'vpn_key' as const,
+};
 
 export default function ForgotPasswordScreen() {
   useColorScheme();
@@ -32,24 +45,26 @@ export default function ForgotPasswordScreen() {
     setSuccess('');
 
     if (!normalized) {
-      setError('Email is required.');
+      setError('Enter the email you used to sign up.');
       return;
     }
 
     if (!EMAIL_PATTERN.test(normalized)) {
-      setError('Please enter a valid email.');
+      setError('That doesn’t look like a valid email.');
       return;
     }
 
     const result = forgotPassword(normalized);
 
     if (!result.ok) {
-      setError('No account found for this email.');
+      setError('We couldn’t find an account with that email.');
       return;
     }
 
-    setSuccess('Reset link sent (mock). Check your inbox in a real backend integration.');
-    showToast('Reset link sent (mock). Check your inbox.');
+    setSuccess(
+      'In a real app, we’d email you a reset link. This demo only confirms your account exists.',
+    );
+    showToast('Reset flow completed (demo)');
   };
 
   return (
@@ -60,40 +75,54 @@ export default function ForgotPasswordScreen() {
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentInsetAdjustmentBehavior={
-          Platform.OS === 'ios' ? 'automatic' : undefined
-        }
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}
       >
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <AppText muted>Enter your email to request a password reset.</AppText>
-          <AuthIllustration variant="forgotPassword" />
+        <ScrollView
+          contentContainerStyle={authScrollContentStyle}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentInsetAdjustmentBehavior={
+            Platform.OS === 'ios' ? 'automatic' : undefined
+          }
+        >
+          <AuthFormCard>
+            <AuthHero
+              title="Forgot password?"
+              subtitle="Enter your email and we’ll walk you through recovery. In this demo, no real email is sent."
+              icon={HERO_ICON}
+            />
+            <AuthIllustration variant="forgotPassword" />
 
-          <AppTextInput
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            placeholder="your-email@example.com"
-            error={error}
-            returnKeyType="done"
-            onSubmitEditing={handleSubmit}
-          />
+            <AppTextInput
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              placeholder="you@example.com"
+              error={error}
+              returnKeyType="done"
+              onSubmitEditing={handleSubmit}
+            />
 
-          {success ? <AppText style={[styles.message, { color: colors.primary }]}>{success}</AppText> : null}
+            {success ? (
+              <AuthFeedbackBanner tone="success" message={success} />
+            ) : null}
 
-          <AppButton label="Send reset link" onPress={handleSubmit} />
+            <AppButton
+              label="Continue"
+              onPress={handleSubmit}
+              style={AUTH_PRIMARY_BUTTON_STYLE}
+            />
 
-          <Pressable onPress={() => router.push('/sign-in')}>
-            <AppText style={styles.linkText}>Back to sign in</AppText>
-          </Pressable>
-        </View>
-      </ScrollView>
+            <View style={styles.footerCenter}>
+              <AuthTextButton
+                label="Back to sign in"
+                onPress={() => router.push('/sign-in')}
+              />
+            </View>
+          </AuthFormCard>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -106,26 +135,7 @@ const styles = StyleSheet.create({
   keyboardAvoid: {
     flex: 1,
   },
-  scrollContent: {
-    padding: 20,
+  footerCenter: {
     alignItems: 'center',
-    justifyContent: 'center',
-    flexGrow: 1,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 420,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    gap: 12,
-  },
-  message: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  linkText: {
-    fontSize: 13,
-    textDecorationLine: 'underline',
   },
 });

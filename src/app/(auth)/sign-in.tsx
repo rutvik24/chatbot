@@ -3,16 +3,22 @@ import { useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
-  View,
   useColorScheme,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppButton, AppText, AppTextInput, AuthIllustration } from '@/components/common';
+import {
+  AUTH_PRIMARY_BUTTON_STYLE,
+  authScrollContentStyle,
+  AuthFeedbackBanner,
+  AuthFormCard,
+  AuthHero,
+  AuthLinksRow,
+} from '@/components/auth';
+import { AppButton, AppTextInput, AuthIllustration } from '@/components/common';
 import { useSession } from '@/ctx/auth-context';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 import { showToast } from '@/utils/toast-bus';
@@ -48,6 +54,12 @@ function validate(values: FormState): FormErrors {
   return errors;
 }
 
+const HERO_ICON = {
+  ios: 'bubble.left.and.bubble.right.fill' as const,
+  android: 'chat' as const,
+  web: 'chat' as const,
+};
+
 export default function SignInScreen() {
   useColorScheme();
   const colors = useNativeThemeColors();
@@ -59,7 +71,7 @@ export default function SignInScreen() {
 
   const canSubmit = useMemo(
     () => form.email.trim().length > 0 && form.password.length > 0,
-    [form.email, form.password]
+    [form.email, form.password],
   );
 
   const handleSubmit = () => {
@@ -82,11 +94,11 @@ export default function SignInScreen() {
     }
 
     if (result.code === 'USER_NOT_FOUND') {
-      setErrors({ general: 'User not found.' });
+      setErrors({ general: 'No account found for that email. Create one first?' });
       return;
     }
 
-    setErrors({ general: 'Incorrect password. Please try again.' });
+    setErrors({ general: 'That password doesn’t match. Try again or reset it.' });
   };
 
   return (
@@ -97,60 +109,76 @@ export default function SignInScreen() {
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentInsetAdjustmentBehavior={
-          Platform.OS === 'ios' ? 'automatic' : undefined
-        }
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}
       >
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <AppText muted style={styles.subtitle}>Sign in to continue to your account.</AppText>
-          <AuthIllustration variant="signIn" />
+        <ScrollView
+          contentContainerStyle={authScrollContentStyle}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentInsetAdjustmentBehavior={
+            Platform.OS === 'ios' ? 'automatic' : undefined
+          }
+        >
+          <AuthFormCard>
+            <AuthHero
+              title="Welcome back"
+              subtitle="Sign in to pick up your chats and settings on this device."
+              icon={HERO_ICON}
+            />
+            <AuthIllustration variant="signIn" />
 
-          <AppTextInput
-            label="Email"
-            value={form.email}
-            onChangeText={(email: string) => setForm((previous) => ({ ...previous, email }))}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            error={errors.email}
-            placeholder="your-email@example.com"
-            returnKeyType="next"
-            blurOnSubmit={false}
-            onSubmitEditing={() => passwordRef.current?.focus()}
-          />
+            <AppTextInput
+              label="Email"
+              value={form.email}
+              onChangeText={(email: string) =>
+                setForm((previous) => ({ ...previous, email }))
+              }
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              error={errors.email}
+              placeholder="you@example.com"
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => passwordRef.current?.focus()}
+            />
 
-          <AppTextInput
-            ref={passwordRef}
-            label="Password"
-            value={form.password}
-            onChangeText={(password: string) => setForm((previous) => ({ ...previous, password }))}
-            isPasswordField
-            error={errors.password}
-            placeholder="Password123!"
-            returnKeyType="done"
-            onSubmitEditing={handleSubmit}
-          />
+            <AppTextInput
+              ref={passwordRef}
+              label="Password"
+              value={form.password}
+              onChangeText={(password: string) =>
+                setForm((previous) => ({ ...previous, password }))
+              }
+              isPasswordField
+              error={errors.password}
+              placeholder="Your password"
+              returnKeyType="done"
+              onSubmitEditing={handleSubmit}
+            />
 
-          {errors.general ? <AppText style={[styles.generalError, { color: colors.error }]}>{errors.general}</AppText> : null}
+            {errors.general ? (
+              <AuthFeedbackBanner tone="error" message={errors.general} />
+            ) : null}
 
-          <AppButton label="Sign In" onPress={handleSubmit} disabled={!canSubmit} />
+            <AppButton
+              label="Sign in"
+              onPress={handleSubmit}
+              disabled={!canSubmit}
+              style={AUTH_PRIMARY_BUTTON_STYLE}
+            />
 
-          <View style={styles.linksRow}>
-            <Pressable onPress={() => router.push('/sign-up')}>
-              <AppText style={styles.linkText}>Create account</AppText>
-            </Pressable>
-            <Pressable onPress={() => router.push('/forgot-password')}>
-              <AppText style={styles.linkText}>Forgot password</AppText>
-            </Pressable>
-          </View>
-
-        </View>
-      </ScrollView>
+            <AuthLinksRow
+              links={[
+                { label: 'Create account', onPress: () => router.push('/sign-up') },
+                {
+                  label: 'Forgot password?',
+                  onPress: () => router.push('/forgot-password'),
+                },
+              ]}
+            />
+          </AuthFormCard>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -162,35 +190,5 @@ const styles = StyleSheet.create({
   },
   keyboardAvoid: {
     flex: 1,
-  },
-  scrollContent: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-    flexGrow: 1,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 420,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    gap: 12,
-  },
-  subtitle: {
-    marginBottom: 8,
-  },
-  generalError: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  linksRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 4,
-  },
-  linkText: {
-    fontSize: 13,
-    textDecorationLine: 'underline',
   },
 });

@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -13,13 +14,20 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
+  AUTH_PRIMARY_BUTTON_STYLE,
+  authScrollContentStyle,
+  AuthFeedbackBanner,
+  AuthFormCard,
+  AuthHero,
+  AuthTextButton,
+} from '@/components/auth';
+import {
   AppButton,
   AppText,
   AppTextInput,
-  PasswordChecklist,
   AuthIllustration,
+  PasswordChecklist,
 } from '@/components/common';
-import { SymbolView } from 'expo-symbols';
 import { useSession } from '@/ctx/auth-context';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 import { isStrongPassword } from '@/utils/password-validation';
@@ -45,6 +53,12 @@ type FormErrors = {
 };
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const HERO_ICON = {
+  ios: 'person.crop.circle.badge.plus' as const,
+  android: 'person_add' as const,
+  web: 'person_add' as const,
+};
 
 export default function SignUpScreen() {
   useColorScheme();
@@ -87,7 +101,7 @@ export default function SignUpScreen() {
       nextErrors.password = 'Password is required.';
     } else if (!isStrongPassword(form.password)) {
       nextErrors.password =
-        'Use at least 8 chars, including uppercase, lowercase, number, and special character.';
+        'Use at least 8 characters with upper, lower, number, and a symbol.';
     }
 
     if (form.confirmPassword !== form.password) {
@@ -95,7 +109,8 @@ export default function SignUpScreen() {
     }
 
     if (!form.acceptedTerms) {
-      nextErrors.acceptedTerms = 'Please accept Terms & Conditions and Privacy Policy.';
+      nextErrors.acceptedTerms =
+        'Please accept the terms to create your account.';
     }
 
     setErrors(nextErrors);
@@ -113,13 +128,16 @@ export default function SignUpScreen() {
     });
 
     if (!result.ok) {
-      setErrors({ general: 'Email is already registered. Try signing in instead.' });
+      setErrors({
+        general:
+          'That email is already registered. Sign in instead or use another email.',
+      });
       return;
     }
 
     const firstName = form.firstName.trim();
-    setSuccessMessage('Account created successfully. Redirecting…');
-    showToast(firstName ? `Welcome, ${firstName}!` : 'Account created successfully');
+    setSuccessMessage('Account created. Taking you to the app…');
+    showToast(firstName ? `Welcome, ${firstName}!` : 'Account created');
     setForm({
       firstName: '',
       lastName: '',
@@ -129,7 +147,6 @@ export default function SignUpScreen() {
       acceptedTerms: false,
     });
 
-    // `signUp()` already sets the session; navigate to chat.
     router.replace('/');
   };
 
@@ -141,129 +158,176 @@ export default function SignUpScreen() {
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentInsetAdjustmentBehavior={
-          Platform.OS === 'ios' ? 'automatic' : undefined
-        }
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}
       >
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <AppText muted>Sign up with a new email to test registration flow.</AppText>
-          <AuthIllustration variant="signUp" />
+        <ScrollView
+          contentContainerStyle={[authScrollContentStyle, styles.signUpScroll]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentInsetAdjustmentBehavior={
+            Platform.OS === 'ios' ? 'automatic' : undefined
+          }
+        >
+          <AuthFormCard>
+            <AuthHero
+              title="Create your account"
+              subtitle="One minute to get started. Your data stays on this device in this demo app."
+              icon={HERO_ICON}
+            />
+            <AuthIllustration variant="signUp" />
 
-          <View style={styles.nameRow}>
-            <View style={styles.nameInput}>
-              <AppTextInput
-                label="First name"
-                value={form.firstName}
-                onChangeText={(firstName: string) => setForm((previous) => ({ ...previous, firstName }))}
-                error={errors.firstName}
-                placeholder="John"
-                returnKeyType="next"
-                blurOnSubmit={false}
-                onSubmitEditing={() => lastNameRef.current?.focus()}
-              />
+            <View style={styles.nameRow}>
+              <View style={styles.nameInput}>
+                <AppTextInput
+                  label="First name"
+                  value={form.firstName}
+                  onChangeText={(firstName: string) =>
+                    setForm((previous) => ({ ...previous, firstName }))
+                  }
+                  error={errors.firstName}
+                  placeholder="John"
+                  returnKeyType="next"
+                  blurOnSubmit={false}
+                  onSubmitEditing={() => lastNameRef.current?.focus()}
+                />
+              </View>
+              <View style={styles.nameInput}>
+                <AppTextInput
+                  ref={lastNameRef}
+                  label="Last name"
+                  value={form.lastName}
+                  onChangeText={(lastName: string) =>
+                    setForm((previous) => ({ ...previous, lastName }))
+                  }
+                  error={errors.lastName}
+                  placeholder="Doe"
+                  returnKeyType="next"
+                  blurOnSubmit={false}
+                  onSubmitEditing={() => emailRef.current?.focus()}
+                />
+              </View>
             </View>
-            <View style={styles.nameInput}>
-              <AppTextInput
-                ref={lastNameRef}
-                label="Last name"
-                value={form.lastName}
-                onChangeText={(lastName: string) => setForm((previous) => ({ ...previous, lastName }))}
-                error={errors.lastName}
-                placeholder="Doe"
-                returnKeyType="next"
-                blurOnSubmit={false}
-                onSubmitEditing={() => emailRef.current?.focus()}
-              />
-            </View>
-          </View>
 
-          <AppTextInput
-            ref={emailRef}
-            label="Email"
-            value={form.email}
-            onChangeText={(email: string) => setForm((previous) => ({ ...previous, email }))}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            error={errors.email}
-            placeholder="new-user@expo.dev"
-            returnKeyType="next"
-            blurOnSubmit={false}
-            onSubmitEditing={() => passwordRef.current?.focus()}
-          />
-          <AppTextInput
-            ref={passwordRef}
-            label="Password"
-            value={form.password}
-            onChangeText={(password: string) => setForm((previous) => ({ ...previous, password }))}
-            isPasswordField
-            error={errors.password}
-            placeholder="Password123!"
-            returnKeyType="next"
-            blurOnSubmit={false}
-            onSubmitEditing={() => confirmPasswordRef.current?.focus()}
-          />
-          <PasswordChecklist password={form.password} />
-          <AppTextInput
-            ref={confirmPasswordRef}
-            label="Confirm password"
-            value={form.confirmPassword}
-            onChangeText={(confirmPassword: string) =>
-              setForm((previous) => ({ ...previous, confirmPassword }))
-            }
-            isPasswordField
-            error={errors.confirmPassword}
-            placeholder="Password123!"
-            returnKeyType="done"
-            onSubmitEditing={() => {
-              void handleSubmit();
-            }}
-          />
+            <AppTextInput
+              ref={emailRef}
+              label="Email"
+              value={form.email}
+              onChangeText={(email: string) =>
+                setForm((previous) => ({ ...previous, email }))
+              }
+              autoCapitalize="none"
+              keyboardType="email-address"
+              error={errors.email}
+              placeholder="you@example.com"
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => passwordRef.current?.focus()}
+            />
+            <AppTextInput
+              ref={passwordRef}
+              label="Password"
+              value={form.password}
+              onChangeText={(password: string) =>
+                setForm((previous) => ({ ...previous, password }))
+              }
+              isPasswordField
+              error={errors.password}
+              placeholder="Strong password"
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => confirmPasswordRef.current?.focus()}
+            />
+            <PasswordChecklist password={form.password} />
+            <AppTextInput
+              ref={confirmPasswordRef}
+              label="Confirm password"
+              value={form.confirmPassword}
+              onChangeText={(confirmPassword: string) =>
+                setForm((previous) => ({ ...previous, confirmPassword }))
+              }
+              isPasswordField
+              error={errors.confirmPassword}
+              placeholder="Repeat password"
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                void handleSubmit();
+              }}
+            />
 
-          <Pressable
-            style={styles.termsRow}
-            onPress={() =>
-              setForm((previous) => ({ ...previous, acceptedTerms: !previous.acceptedTerms }))
-            }>
             <View
               style={[
-                styles.checkbox,
-                {
-                  borderColor: form.acceptedTerms ? colors.primary : colors.border,
-                  backgroundColor: form.acceptedTerms ? colors.primary : 'transparent',
-                },
+                styles.termsCard,
+                { borderColor: colors.border, backgroundColor: colors.background },
               ]}
             >
-              {form.acceptedTerms ? (
-                <SymbolView
-                  name={{ ios: 'checkmark', android: 'check', web: 'check' }}
-                  size={14}
-                  tintColor="#FFFFFF"
-                />
-              ) : null}
+              <Pressable
+                style={styles.termsRow}
+                onPress={() =>
+                  setForm((previous) => ({
+                    ...previous,
+                    acceptedTerms: !previous.acceptedTerms,
+                  }))
+                }
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: form.acceptedTerms }}
+              >
+                <View
+                  style={[
+                    styles.checkbox,
+                    {
+                      borderColor: form.acceptedTerms
+                        ? colors.primary
+                        : colors.border,
+                      backgroundColor: form.acceptedTerms
+                        ? colors.primary
+                        : 'transparent',
+                    },
+                  ]}
+                >
+                  {form.acceptedTerms ? (
+                    <SymbolView
+                      name={{
+                        ios: 'checkmark',
+                        android: 'check',
+                        web: 'check',
+                      }}
+                      size={16}
+                      tintColor="#FFFFFF"
+                    />
+                  ) : null}
+                </View>
+                <AppText style={[styles.termsText, { color: colors.text }]}>
+                  I agree to the Terms & Conditions and Privacy Policy (demo).
+                </AppText>
+              </Pressable>
             </View>
-            <AppText style={styles.termsText}>
-              I accept the Terms & Conditions and Privacy Policy
-            </AppText>
-          </Pressable>
-          {errors.acceptedTerms ? (
-            <AppText style={[styles.message, { color: colors.error }]}>{errors.acceptedTerms}</AppText>
-          ) : null}
+            {errors.acceptedTerms ? (
+              <AppText style={[styles.inlineError, { color: colors.error }]}>
+                {errors.acceptedTerms}
+              </AppText>
+            ) : null}
 
-          {errors.general ? <AppText style={[styles.message, { color: colors.error }]}>{errors.general}</AppText> : null}
-          {successMessage ? <AppText style={[styles.message, { color: colors.primary }]}>{successMessage}</AppText> : null}
+            {errors.general ? (
+              <AuthFeedbackBanner tone="error" message={errors.general} />
+            ) : null}
+            {successMessage ? (
+              <AuthFeedbackBanner tone="success" message={successMessage} />
+            ) : null}
 
-          <AppButton label="Sign Up" onPress={handleSubmit} />
+            <AppButton
+              label="Create account"
+              onPress={handleSubmit}
+              style={AUTH_PRIMARY_BUTTON_STYLE}
+            />
 
-          <Pressable onPress={() => router.push('/sign-in')}>
-            <AppText style={styles.linkText}>Back to sign in</AppText>
-          </Pressable>
-        </View>
-      </ScrollView>
+            <View style={styles.footerCenter}>
+              <AuthTextButton
+                label="Already have an account? Sign in"
+                onPress={() => router.push('/sign-in')}
+              />
+            </View>
+          </AuthFormCard>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -276,52 +340,49 @@ const styles = StyleSheet.create({
   keyboardAvoid: {
     flex: 1,
   },
-  scrollContent: {
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexGrow: 1,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 420,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    gap: 12,
-  },
-  message: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  linkText: {
-    fontSize: 13,
-    textDecorationLine: 'underline',
+  signUpScroll: {
+    justifyContent: 'flex-start',
+    paddingTop: 12,
   },
   nameRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 12,
   },
   nameInput: {
     flex: 1,
+    minWidth: 0,
+  },
+  termsCard: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 14,
   },
   termsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 4,
+    alignItems: 'flex-start',
+    gap: 12,
   },
   checkbox: {
-    width: 18,
-    height: 18,
-    borderWidth: 1,
-    borderRadius: 4,
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderRadius: 8,
+    marginTop: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   termsText: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  inlineError: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  footerCenter: {
+    alignItems: 'center',
+    marginTop: 4,
   },
 });
