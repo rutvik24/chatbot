@@ -81,7 +81,7 @@ function RootNavigator() {
         })}
       >
         <Stack.Protected guard={!!session}>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="(main)" options={{ headerShown: false }} />
           <Stack.Screen
             name="(auth)/change-password"
             options={{

@@ -1,10 +1,12 @@
+import { DrawerActions, useNavigation } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Modal, Pressable, SectionList, StyleSheet, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/common';
+import { TabScreenHeader } from '@/components/tab-screen-header';
 import type { ThemePreference } from '@/constants/theme-preference';
 import { useSession } from '@/ctx/auth-context';
 import { useThemePreference } from '@/ctx/theme-preference-context';
@@ -31,7 +33,11 @@ const THEME_OPTIONS: {
 
 export default function SettingsScreen() {
   useColorScheme();
+  const navigation = useNavigation();
   const colors = useNativeThemeColors();
+  const openDrawer = useCallback(() => {
+    navigation.dispatch(DrawerActions.openDrawer());
+  }, [navigation]);
   const { preference, setPreference } = useThemePreference();
   const { signOut } = useSession();
   const [isSignOutModalVisible, setIsSignOutModalVisible] = useState(false);
@@ -54,7 +60,9 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <TabScreenHeader title="Settings" onMenuPress={openDrawer} />
       <SectionList
+        style={styles.list}
         sections={sections}
         keyExtractor={(item) => item.href}
         contentContainerStyle={styles.listContent}
@@ -212,6 +220,9 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  list: {
     flex: 1,
   },
   listContent: {

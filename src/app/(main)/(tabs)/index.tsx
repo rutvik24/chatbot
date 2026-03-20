@@ -1,4 +1,8 @@
-import { useFocusEffect } from "@react-navigation/native";
+import {
+  DrawerActions,
+  useFocusEffect,
+  useNavigation,
+} from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { SymbolView } from "expo-symbols";
@@ -22,6 +26,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppText } from "@/components/common";
 import MarkdownMessage from "@/components/markdown-message";
+import { TabScreenHeader } from "@/components/tab-screen-header";
+import { useChatActions } from "@/ctx/chat-actions-context";
 import { useSession } from "@/ctx/auth-context";
 import { useNativeThemeColors } from "@/hooks/use-native-theme-colors";
 import { useStorageState } from "@/hooks/use-storage-state";
@@ -56,6 +62,7 @@ import {
 
 export default function HomeScreen() {
   useColorScheme();
+  const navigation = useNavigation();
   const router = useRouter();
   const { session, isLoading: isSessionLoading } = useSession();
   const colors = useNativeThemeColors();
@@ -674,6 +681,37 @@ export default function HomeScreen() {
     setIsGenerating(false);
   };
 
+  const handleNewChat = useCallback(() => {
+    generationRunIdRef.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setIsGenerating(false);
+    setMessages([]);
+    setText("");
+    setError(null);
+    setModelPickerOpen(false);
+    setModelSearch("");
+    shouldAutoScrollRef.current = true;
+    isAtBottomRef.current = true;
+    stickToBottomRef.current = false;
+    prevScrolledAwayRef.current = false;
+    jumpScrollLockUntilRef.current = 0;
+    setShowJumpToBottomFab(false);
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    });
+  }, []);
+
+  const { registerStartNewChat } = useChatActions();
+  useEffect(() => {
+    registerStartNewChat(handleNewChat);
+    return () => registerStartNewChat(null);
+  }, [registerStartNewChat, handleNewChat]);
+
+  const openDrawer = useCallback(() => {
+    navigation.dispatch(DrawerActions.openDrawer());
+  }, [navigation]);
+
   const handleRetryLoadModels = useCallback(() => {
     if (!effectiveAiApiKey.trim()) return;
     modelsListCacheRef.current = null;
@@ -707,6 +745,7 @@ export default function HomeScreen() {
     <SafeAreaView
       style={[styles.container, { backgroundColor: colors.background }]}
     >
+      <TabScreenHeader title="Chat" onMenuPress={openDrawer} />
       <KeyboardAvoidingView
         style={styles.keyboardRoot}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
