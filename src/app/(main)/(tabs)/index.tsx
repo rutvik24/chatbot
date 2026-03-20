@@ -16,6 +16,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   TextInput,
   View,
@@ -23,7 +24,10 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 import { AppText } from "@/components/common";
 import MarkdownMessage from "@/components/markdown-message";
@@ -78,6 +82,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { session, isLoading: isSessionLoading } = useSession();
   const colors = useNativeThemeColors();
+  const safeInsets = useSafeAreaInsets();
   const [text, setText] = useState("");
   const [messages, setMessages] = useState<ChatMessageWithTime[]>([]);
   /** Stable id for the current thread (persisted + history). */
@@ -117,6 +122,17 @@ export default function HomeScreen() {
     const t = storedChatModelId?.trim();
     return t && t.length > 0 ? t : DEFAULT_CHAT_MODEL_ID;
   }, [storedChatModelId]);
+
+  /** Modal: edit an existing user bubble (truncates later messages on save if text changed). */
+  const [messageEdit, setMessageEdit] = useState<{
+    id: string;
+    draft: string;
+  } | null>(null);
+  const messageEditInputRef = useRef<TextInput>(null);
+
+  const closeMessageEdit = useCallback(() => {
+    setMessageEdit(null);
+  }, []);
 
   const copyWholeMessage = useCallback(async (raw: string) => {
     const t = raw?.trim() ?? "";
@@ -167,6 +183,19 @@ export default function HomeScreen() {
 
   const composerInputRef = useRef<TextInput>(null);
   const generationRunIdRef = useRef(0);
+
+  /** Always points at latest `messages` for queue processors (avoids stale closures). */
+  const messagesRef = useRef<ChatMessageWithTime[]>(messages);
+  messagesRef.current = messages;
+
+  /** FIFO: sends and edit→regenerate while a reply is streaming. Drained when a run finishes (not on Stop). */
+  type QueuedGenerationJob =
+    | { type: "send"; userText: string }
+    | { type: "regenerate"; messageId: string; trimmed: string };
+  const generationQueueRef = useRef<QueuedGenerationJob[]>([]);
+  const [pendingGenerationQueueCount, setPendingGenerationQueueCount] =
+    useState(0);
+
   const chatTimelineRows = useMemo(
     () => buildChatTimelineRows(messages),
     [messages],
@@ -276,21 +305,22 @@ export default function HomeScreen() {
     notifyPersisted,
   ]);
 
-  const canSend = useMemo(
+  const composerSubmitDisabled = useMemo(
     () =>
-      text.trim().length > 0 &&
-      !isGenerating &&
-      !isSessionLoading &&
-      !isMigratingKey &&
-      !!effectiveAiApiKey.trim() &&
-      historyHydrated,
+      !text.trim() ||
+      isSessionLoading ||
+      isMigratingKey ||
+      !historyHydrated ||
+      (isKeyLoading && !resolveAiApiKey(storedAiApiKey).trim()) ||
+      !effectiveAiApiKey.trim(),
     [
       text,
-      isGenerating,
       isSessionLoading,
       isMigratingKey,
-      effectiveAiApiKey,
       historyHydrated,
+      isKeyLoading,
+      storedAiApiKey,
+      effectiveAiApiKey,
     ],
   );
 
@@ -713,98 +743,84 @@ export default function HomeScreen() {
     }
   };
 
-  const handleSend = async () => {
-    const value = text.trim();
-    if (!value) {
-      return;
-    }
+  type AssistantStreamCancel =
+    | { mode: "send"; userMessageId: string; restoreComposer: string }
+    | { mode: "edit" };
+
+  /** Declared below; used from `runAssistantStream` `finally` (hoisted). */
+  async function processGenerationQueue(): Promise<void> {
+    if (isGeneratingRef.current) return;
+    const q = generationQueueRef.current;
+    if (q.length === 0) return;
 
     if (isSessionLoading || isMigratingKey) {
+      setTimeout(() => void processGenerationQueue(), 200);
+      return;
+    }
+    if (isKeyLoading && !resolveAiApiKey(storedAiApiKey).trim()) {
+      setTimeout(() => void processGenerationQueue(), 200);
       return;
     }
 
-    // Wait for key storage unless an env default is available.
-    if (isKeyLoading && !resolveAiApiKey(storedAiApiKey).trim()) {
+    const job = q.shift()!;
+    setPendingGenerationQueueCount(q.length);
+
+    if (job.type === "send") {
+      if (!effectiveAiApiKey.trim()) {
+        setError("API key for your account is missing. Add it in AI settings.");
+        void processGenerationQueue();
+        return;
+      }
+      await performSendUserText(job.userText);
+      return;
+    }
+
+    let nextBase: ChatMessageWithTime[] | null = null;
+    setMessages((prev) => {
+      const i = prev.findIndex((m) => m.id === job.messageId);
+      if (i === -1) return prev;
+      const head = prev.slice(0, i);
+      const updated: ChatMessageWithTime = {
+        ...prev[i],
+        content: job.trimmed,
+      };
+      nextBase = [...head, updated];
+      return nextBase;
+    });
+
+    if (nextBase === null) {
+      void processGenerationQueue();
       return;
     }
 
     if (!effectiveAiApiKey.trim()) {
       setError("API key for your account is missing. Add it in AI settings.");
+      void processGenerationQueue();
       return;
     }
 
-    setError(null);
+    await beginRegenerateAfterEdit(nextBase);
+  }
 
-    // Pin to bottom for the whole reply (same idea as “Catch up” during streaming).
-    shouldAutoScrollRef.current = true;
-    isAtBottomRef.current = true;
-    stickToBottomRef.current = true;
-    prevScrolledAwayRef.current = false;
-    setShowJumpToBottomFab(false);
-
-    const runId = ++generationRunIdRef.current;
-
-    // Cancel any in-flight request.
-    abortRef.current?.abort();
-    const abortController = new AbortController();
-    abortRef.current = abortController;
-
-    const userMessageId = makeId();
-    const assistantMessageId = makeId();
-
-    const sentAt = Date.now();
-    const userMsg: ChatMessageWithTime = {
-      id: userMessageId,
-      role: "user",
-      content: value,
-      createdAt: sentAt,
-    };
-    const assistantMsg: ChatMessageWithTime = {
-      id: assistantMessageId,
-      role: "assistant",
-      content: "",
-      createdAt: sentAt,
-    };
-
-    setMessages((previous) => [...previous, userMsg, assistantMsg]);
-    setText("");
-    setIsGenerating(true);
-
-    // Re-read Profile from storage so name/email match what the user just saved
-    // (React state can lag until the tab regains focus).
-    let profileJsonForChat: string | null = storedProfileJson;
-    try {
-      if (Platform.OS === "web") {
-        if (typeof localStorage !== "undefined") {
-          profileJsonForChat = localStorage.getItem(profileStorageKey);
-        }
-      } else {
-        profileJsonForChat = await SecureStore.getItemAsync(profileStorageKey);
-      }
-      if (profileJsonForChat !== storedProfileJson) {
-        setProfileJson(profileJsonForChat);
-      }
-    } catch {
-      // Keep in-memory profile if storage read fails.
-    }
-
-    // Recent turns + system context from Profile + session (authoritative user facts).
-    const personalization = buildUserPersonalizationSystemMessage(
-      session,
-      profileJsonForChat,
-    );
-    const recentTurns: ChatMessage[] = [
-      ...messages.map(({ role, content }) => ({ role, content })),
-      { role: "user" as const, content: value },
-    ].slice(-10);
-    const history: ChatMessage[] = personalization
-      ? [personalization, ...recentTurns]
-      : recentTurns;
+  async function runAssistantStream(args: {
+    runId: number;
+    abortController: AbortController;
+    assistantMessageId: string;
+    history: ChatMessage[];
+    cancelBehavior: AssistantStreamCancel;
+  }): Promise<void> {
+    const {
+      runId,
+      abortController,
+      assistantMessageId,
+      history,
+      cancelBehavior,
+    } = args;
 
     let lastFlush = Date.now();
     let buffer = "";
-    /** Any non-empty token from the model (used on Stop: discard turn vs keep partial). */
     let assistantReceivedOutput = false;
+    let endedByCancel = false;
 
     try {
       for await (const token of streamChatCompletion({
@@ -831,11 +847,10 @@ export default function HomeScreen() {
     } catch (e) {
       const friendly = getFriendlyChatProviderError(e);
 
-      // When the user presses "Stop", we abort the request. In that case,
-      // avoid injecting a cancellation error message into the assistant.
       const isCancelled = friendly === "The request was cancelled.";
       const isActiveRun = generationRunIdRef.current === runId;
       if (isCancelled) {
+        endedByCancel = true;
         if (!isActiveRun) return;
 
         const pendingBufferHadContent = buffer.length > 0;
@@ -848,20 +863,26 @@ export default function HomeScreen() {
           assistantReceivedOutput || pendingBufferHadContent;
 
         if (!keepPartialTurn) {
-          setMessages((previous) =>
-            previous.filter(
-              (m) => m.id !== userMessageId && m.id !== assistantMessageId,
-            ),
-          );
+          if (cancelBehavior.mode === "send") {
+            setMessages((previous) =>
+              previous.filter(
+                (m) =>
+                  m.id !== cancelBehavior.userMessageId &&
+                  m.id !== assistantMessageId,
+              ),
+            );
+            setText(cancelBehavior.restoreComposer);
+            requestAnimationFrame(() => {
+              composerInputRef.current?.focus();
+            });
+          } else {
+            setMessages((previous) =>
+              previous.filter((m) => m.id !== assistantMessageId),
+            );
+          }
         }
 
         setError(null);
-        if (!keepPartialTurn) {
-          setText(value);
-          requestAnimationFrame(() => {
-            composerInputRef.current?.focus();
-          });
-        }
         return;
       }
 
@@ -877,15 +898,335 @@ export default function HomeScreen() {
       );
       if (isActiveRun) setError(friendly);
     } finally {
-      if (generationRunIdRef.current === runId) setIsGenerating(false);
+      if (generationRunIdRef.current === runId) {
+        isGeneratingRef.current = false;
+        setIsGenerating(false);
+      }
+      if (generationRunIdRef.current === runId && !endedByCancel) {
+        queueMicrotask(() => {
+          void processGenerationQueue();
+        });
+      }
+    }
+  }
+
+  async function beginRegenerateAfterEdit(
+    nextBase: ChatMessageWithTime[],
+  ): Promise<void> {
+    if (isSessionLoading || isMigratingKey) {
+      return;
+    }
+    if (isKeyLoading && !resolveAiApiKey(storedAiApiKey).trim()) {
+      setError("API key is still loading. Try again in a moment.");
+      return;
+    }
+    if (!effectiveAiApiKey.trim()) {
+      setError("API key for your account is missing. Add it in AI settings.");
+      return;
+    }
+
+    setError(null);
+
+    shouldAutoScrollRef.current = true;
+    isAtBottomRef.current = true;
+    stickToBottomRef.current = true;
+    prevScrolledAwayRef.current = false;
+    setShowJumpToBottomFab(false);
+
+    const runId = ++generationRunIdRef.current;
+
+    abortRef.current?.abort();
+    const abortController = new AbortController();
+    abortRef.current = abortController;
+
+    const assistantMessageId = makeId();
+    const sentAt = Date.now();
+    const assistantMsg: ChatMessageWithTime = {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      createdAt: sentAt,
+    };
+
+    setMessages([...nextBase, assistantMsg]);
+    isGeneratingRef.current = true;
+    setIsGenerating(true);
+
+    let profileJsonForChat: string | null = storedProfileJson;
+    try {
+      if (Platform.OS === "web") {
+        if (typeof localStorage !== "undefined") {
+          profileJsonForChat = localStorage.getItem(profileStorageKey);
+        }
+      } else {
+        profileJsonForChat = await SecureStore.getItemAsync(profileStorageKey);
+      }
+      if (profileJsonForChat !== storedProfileJson) {
+        setProfileJson(profileJsonForChat);
+      }
+    } catch {
+      // Keep in-memory profile if storage read fails.
+    }
+
+    const personalization = buildUserPersonalizationSystemMessage(
+      session,
+      profileJsonForChat,
+    );
+    const recentTurns: ChatMessage[] = nextBase
+      .map(({ role, content }) => ({ role, content }))
+      .slice(-10);
+    const history: ChatMessage[] = personalization
+      ? [personalization, ...recentTurns]
+      : recentTurns;
+
+    await runAssistantStream({
+      runId,
+      abortController,
+      assistantMessageId,
+      history,
+      cancelBehavior: { mode: "edit" },
+    });
+  }
+
+  async function performSendUserText(value: string): Promise<void> {
+    shouldAutoScrollRef.current = true;
+    isAtBottomRef.current = true;
+    stickToBottomRef.current = true;
+    prevScrolledAwayRef.current = false;
+    setShowJumpToBottomFab(false);
+
+    const runId = ++generationRunIdRef.current;
+
+    abortRef.current?.abort();
+    const abortController = new AbortController();
+    abortRef.current = abortController;
+
+    const userMessageId = makeId();
+    const assistantMessageId = makeId();
+
+    const sentAt = Date.now();
+    const userMsg: ChatMessageWithTime = {
+      id: userMessageId,
+      role: "user",
+      content: value,
+      createdAt: sentAt,
+    };
+    const assistantMsg: ChatMessageWithTime = {
+      id: assistantMessageId,
+      role: "assistant",
+      content: "",
+      createdAt: sentAt,
+    };
+
+    /** Snapshot before append — `messagesRef` lags until the next render. */
+    const messagesBeforeSend = messagesRef.current;
+
+    setMessages((previous) => [...previous, userMsg, assistantMsg]);
+    isGeneratingRef.current = true;
+    setIsGenerating(true);
+
+    let profileJsonForChat: string | null = storedProfileJson;
+    try {
+      if (Platform.OS === "web") {
+        if (typeof localStorage !== "undefined") {
+          profileJsonForChat = localStorage.getItem(profileStorageKey);
+        }
+      } else {
+        profileJsonForChat = await SecureStore.getItemAsync(profileStorageKey);
+      }
+      if (profileJsonForChat !== storedProfileJson) {
+        setProfileJson(profileJsonForChat);
+      }
+    } catch {
+      // Keep in-memory profile if storage read fails.
+    }
+
+    const personalization = buildUserPersonalizationSystemMessage(
+      session,
+      profileJsonForChat,
+    );
+    const recentTurns: ChatMessage[] = [
+      ...messagesBeforeSend.map(({ role, content }) => ({ role, content })),
+      { role: "user" as const, content: value },
+    ].slice(-10);
+    const history: ChatMessage[] = personalization
+      ? [personalization, ...recentTurns]
+      : recentTurns;
+
+    await runAssistantStream({
+      runId,
+      abortController,
+      assistantMessageId,
+      history,
+      cancelBehavior: {
+        mode: "send",
+        userMessageId,
+        restoreComposer: value,
+      },
+    });
+  }
+
+  const handleSend = async () => {
+    const value = text.trim();
+    if (!value) {
+      return;
+    }
+
+    if (isSessionLoading || isMigratingKey) {
+      return;
+    }
+
+    if (isKeyLoading && !resolveAiApiKey(storedAiApiKey).trim()) {
+      return;
+    }
+
+    if (!effectiveAiApiKey.trim()) {
+      setError("API key for your account is missing. Add it in AI settings.");
+      return;
+    }
+
+    if (isGeneratingRef.current) {
+      generationQueueRef.current.push({ type: "send", userText: value });
+      setPendingGenerationQueueCount(generationQueueRef.current.length);
+      setText("");
+      showToast({
+        variant: "info",
+        title: "Queued",
+        message: "Your message will send after the current reply finishes.",
+      });
+      return;
+    }
+
+    setError(null);
+    setText("");
+    await performSendUserText(value);
+  };
+
+  const saveMessageEdit = () => {
+    if (!messageEdit) return;
+    const trimmed = messageEdit.draft.trim();
+    if (!trimmed) {
+      showToast({
+        variant: "error",
+        title: "Can’t save",
+        message: "Write something first, or tap Cancel.",
+      });
+      return;
+    }
+
+    if (isGeneratingRef.current) {
+      const prev = messagesRef.current;
+      const i = prev.findIndex((m) => m.id === messageEdit.id);
+      if (i === -1) {
+        showToast({
+          variant: "error",
+          title: "Can’t update",
+          message: "That message is no longer in this chat.",
+        });
+        closeMessageEdit();
+        return;
+      }
+      if (prev[i].content === trimmed) {
+        closeMessageEdit();
+        return;
+      }
+      generationQueueRef.current.push({
+        type: "regenerate",
+        messageId: messageEdit.id,
+        trimmed,
+      });
+      setPendingGenerationQueueCount(generationQueueRef.current.length);
+      closeMessageEdit();
+      showToast({
+        variant: "info",
+        title: "Edit queued",
+        message:
+          "We’ll apply your edit and regenerate after the current reply finishes.",
+      });
+      return;
+    }
+
+    let outcome:
+      | "missing"
+      | "unchanged"
+      | "updated"
+      | "updated_truncated" = "missing";
+
+    let nextBase: ChatMessageWithTime[] | null = null;
+
+    setMessages((prev) => {
+      const i = prev.findIndex((m) => m.id === messageEdit.id);
+      if (i === -1) {
+        outcome = "missing";
+        return prev;
+      }
+      if (prev[i].content === trimmed) {
+        outcome = "unchanged";
+        return prev;
+      }
+      const head = prev.slice(0, i);
+      const updated: ChatMessageWithTime = { ...prev[i], content: trimmed };
+      nextBase = [...head, updated];
+      const following = prev.length - i - 1;
+      outcome = following > 0 ? "updated_truncated" : "updated";
+      return nextBase;
+    });
+
+    if (outcome === "missing") {
+      showToast({
+        variant: "error",
+        title: "Can’t update",
+        message: "That message is no longer in this chat.",
+      });
+      closeMessageEdit();
+      return;
+    }
+
+    if (outcome === "unchanged") {
+      closeMessageEdit();
+      return;
+    }
+
+    generationRunIdRef.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    isGeneratingRef.current = false;
+    setIsGenerating(false);
+    setError(null);
+    closeMessageEdit();
+
+    if (outcome === "updated_truncated") {
+      showToast({
+        variant: "info",
+        title: "Message updated",
+        message: "Later replies were removed. Generating a new answer…",
+      });
+    } else {
+      showToast({
+        variant: "success",
+        title: "Regenerating",
+        message: "Fetching a fresh reply for your edited message…",
+      });
+    }
+
+    if (nextBase) {
+      void beginRegenerateAfterEdit(nextBase);
     }
   };
 
+  useEffect(() => {
+    if (!messageEdit) return;
+    const t = setTimeout(() => messageEditInputRef.current?.focus(), 350);
+    return () => clearTimeout(t);
+  }, [messageEdit?.id]);
+
   const handleStop = () => {
-    // Stop streaming / generation immediately.
+    generationQueueRef.current = [];
+    setPendingGenerationQueueCount(0);
     abortRef.current?.abort();
     abortRef.current = null;
     setError(null);
+    isGeneratingRef.current = false;
     setIsGenerating(false);
   };
 
@@ -894,8 +1235,11 @@ export default function HomeScreen() {
     const prevMessages = messages;
 
     generationRunIdRef.current += 1;
+    generationQueueRef.current = [];
+    setPendingGenerationQueueCount(0);
     abortRef.current?.abort();
     abortRef.current = null;
+    isGeneratingRef.current = false;
     setIsGenerating(false);
     const newId = createChatSessionId();
     setChatSessionId(newId);
@@ -952,8 +1296,11 @@ export default function HomeScreen() {
   useEffect(() => {
     registerApplyHistorySession((payload) => {
       generationRunIdRef.current += 1;
+      generationQueueRef.current = [];
+      setPendingGenerationQueueCount(0);
       abortRef.current?.abort();
       abortRef.current = null;
+      isGeneratingRef.current = false;
       setIsGenerating(false);
       setChatSessionId(payload.sessionId);
       setMessages(payload.messages);
@@ -1024,7 +1371,7 @@ export default function HomeScreen() {
             ref={listRef}
             style={styles.messagesList}
             data={chatTimelineRows}
-            extraData={messageCopyEnabled}
+            extraData={{ messageCopyEnabled, pendingGenerationQueueCount }}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.messagesContent}
             keyboardShouldPersistTaps="handled"
@@ -1241,6 +1588,10 @@ export default function HomeScreen() {
                       messageCopyEnabled &&
                       !isThinkingPlaceholder &&
                       (item.content ?? "").trim().length > 0;
+                    const canEditUser =
+                      item.role === "user" &&
+                      historyHydrated &&
+                      (item.content ?? "").trim().length > 0;
                     return (
                       <View
                         style={[
@@ -1250,6 +1601,33 @@ export default function HomeScreen() {
                             : styles.messageMetaRowAssistant,
                         ]}
                       >
+                        {canEditUser ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Edit message"
+                            hitSlop={10}
+                            onPress={() =>
+                              setMessageEdit({
+                                id: item.id,
+                                draft: item.content,
+                              })
+                            }
+                            style={({ pressed }) => [
+                              styles.messageCopyButton,
+                              { opacity: pressed ? 0.65 : 1 },
+                            ]}
+                          >
+                            <SymbolView
+                              name={{
+                                ios: "square.and.pencil",
+                                android: "edit",
+                                web: "edit",
+                              }}
+                              size={18}
+                              tintColor={colors.secondaryText}
+                            />
+                          </Pressable>
+                        ) : null}
                         {canCopyWhole ? (
                           <Pressable
                             accessibilityRole="button"
@@ -1323,37 +1701,76 @@ export default function HomeScreen() {
                   },
                 ]}
                 onSubmitEditing={() => {
-                  if (isGenerating) return;
                   void handleSend();
                 }}
                 returnKeyType="default"
               />
+              {isGenerating ? (
+                <Pressable
+                  onPress={handleStop}
+                  accessibilityRole="button"
+                  accessibilityLabel="Stop generating"
+                  style={({ pressed }) => [
+                    styles.composerStopButton,
+                    {
+                      backgroundColor: colors.error,
+                      opacity: pressed ? 0.88 : 1,
+                    },
+                  ]}
+                >
+                  <SymbolView
+                    name={{
+                      ios: "stop.fill",
+                      android: "stop",
+                      web: "stop",
+                    }}
+                    size={18}
+                    tintColor="#FFFFFF"
+                  />
+                </Pressable>
+              ) : null}
               <Pressable
-                onPress={isGenerating ? handleStop : handleSend}
-                disabled={!isGenerating && !canSend}
+                onPress={() => void handleSend()}
+                disabled={composerSubmitDisabled}
                 style={({ pressed }) => [
                   styles.sendButton,
                   {
-                    backgroundColor: isGenerating
-                      ? colors.error
-                      : canSend
-                        ? colors.primary
-                        : colors.border,
+                    backgroundColor: composerSubmitDisabled
+                      ? colors.border
+                      : colors.primary,
                     opacity: pressed ? 0.9 : 1,
                   },
                 ]}
+                accessibilityLabel={
+                  isGenerating ? "Queue message" : "Send message"
+                }
               >
                 <SymbolView
-                  name={
-                    isGenerating
-                      ? { ios: "stop.fill", android: "stop", web: "stop" }
-                      : { ios: "paperplane.fill", android: "send", web: "send" }
-                  }
+                  name={{
+                    ios: "paperplane.fill",
+                    android: "send",
+                    web: "send",
+                  }}
                   size={18}
                   tintColor="#FFFFFF"
                 />
               </Pressable>
             </View>
+            {pendingGenerationQueueCount > 0 ? (
+              <View style={styles.composerQueueHintWrap}>
+                <AppText
+                  muted
+                  style={[
+                    styles.composerQueueHintText,
+                    { color: colors.secondaryText },
+                  ]}
+                >
+                  {pendingGenerationQueueCount === 1
+                    ? "1 reply queued — sends after the current one finishes."
+                    : `${pendingGenerationQueueCount} replies queued — they run in order after this one.`}
+                </AppText>
+              </View>
+            ) : null}
 
             {!effectiveAiApiKey.trim() ? (
               <View style={styles.composerInlineHintWrap}>
@@ -1767,6 +2184,124 @@ export default function HomeScreen() {
           </View>
         </SafeAreaView>
       </Modal>
+
+      <Modal
+        visible={messageEdit !== null}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeMessageEdit}
+      >
+        <SafeAreaView
+          style={[styles.modalRoot, { backgroundColor: colors.background }]}
+          edges={["top", "left", "right"]}
+        >
+          <KeyboardAvoidingView
+            style={styles.editMessageKeyboard}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+          >
+            <View
+              style={[
+                styles.editMessageHeader,
+                { borderBottomColor: colors.border },
+              ]}
+            >
+              <View style={styles.modalHeaderTextCol}>
+                <AppText style={[styles.modalTitle, { color: colors.text }]}>
+                  Edit message
+                </AppText>
+                <AppText muted style={styles.modalSubtitle}>
+                  Saving removes any messages after this one (including a reply
+                  that’s still loading) so the thread stays consistent.
+                </AppText>
+              </View>
+              <Pressable
+                onPress={closeMessageEdit}
+                hitSlop={8}
+                style={styles.modalCloseBtn}
+                accessibilityLabel="Cancel editing"
+              >
+                <SymbolView
+                  name={{
+                    ios: "xmark.circle.fill",
+                    android: "close",
+                    web: "close",
+                  }}
+                  size={28}
+                  tintColor={colors.secondaryText}
+                />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.editMessageScrollContent}
+              style={styles.editMessageScroll}
+            >
+              <TextInput
+                ref={messageEditInputRef}
+                value={messageEdit?.draft ?? ""}
+                onChangeText={(t) =>
+                  setMessageEdit((s) => (s ? { ...s, draft: t } : null))
+                }
+                multiline
+                textAlignVertical="top"
+                placeholder="Your message…"
+                placeholderTextColor={colors.placeholder as string}
+                style={[
+                  styles.editMessageInput,
+                  {
+                    color: colors.text,
+                    borderColor: colors.border,
+                    backgroundColor: colors.surface,
+                  },
+                ]}
+              />
+            </ScrollView>
+
+            <View
+              style={[
+                styles.editMessageActions,
+                {
+                  borderTopColor: colors.border,
+                  paddingBottom: Math.max(safeInsets.bottom, 14),
+                },
+              ]}
+            >
+              <Pressable
+                onPress={closeMessageEdit}
+                style={({ pressed }) => [
+                  styles.editMessageSecondaryBtn,
+                  {
+                    borderColor: colors.border,
+                    opacity: pressed ? 0.75 : 1,
+                  },
+                ]}
+                accessibilityLabel="Cancel"
+              >
+                <AppText
+                  style={[styles.editMessageSecondaryLabel, { color: colors.text }]}
+                >
+                  Cancel
+                </AppText>
+              </Pressable>
+              <Pressable
+                onPress={saveMessageEdit}
+                style={({ pressed }) => [
+                  styles.editMessagePrimaryBtn,
+                  {
+                    backgroundColor: colors.primary,
+                    opacity: pressed ? 0.88 : 1,
+                  },
+                ]}
+                accessibilityLabel="Save message"
+              >
+                <AppText style={styles.editMessagePrimaryLabel}>Save</AppText>
+              </Pressable>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -2058,6 +2593,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  composerStopButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  composerQueueHintWrap: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    paddingTop: 2,
+  },
+  composerQueueHintText: {
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16,
+  },
   modalRoot: {
     flex: 1,
   },
@@ -2159,6 +2711,68 @@ const styles = StyleSheet.create({
   modalEmpty: {
     padding: 20,
     textAlign: "center",
+  },
+  editMessageKeyboard: {
+    flex: 1,
+  },
+  editMessageHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 12,
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  editMessageScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  editMessageScrollContent: {
+    padding: 16,
+    paddingBottom: 20,
+    flexGrow: 1,
+  },
+  editMessageInput: {
+    minHeight: 160,
+    maxHeight: 360,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  editMessageActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  editMessageSecondaryBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  editMessageSecondaryLabel: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  editMessagePrimaryBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    borderRadius: 14,
+    minWidth: 100,
+    alignItems: "center",
+  },
+  editMessagePrimaryLabel: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#FFFFFF",
   },
 });
 

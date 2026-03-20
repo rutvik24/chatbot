@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { Platform, Pressable, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 
+import { useThemePreference } from '@/ctx/theme-preference-context';
 import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 import { showToast } from '@/utils/toast-bus';
 
@@ -102,6 +103,8 @@ export default function MarkdownMessage({
   ...rest
 }: MarkdownMessageProps) {
   const colors = useNativeThemeColors();
+  const { resolvedColorScheme } = useThemePreference();
+  const isDarkUi = resolvedColorScheme === 'dark';
   const onPrimary = tone === 'onPrimary';
 
   const markdownit = useMemo(
@@ -240,15 +243,31 @@ export default function MarkdownMessage({
         backgroundColor: codeBg,
         borderRadius: 14,
       },
+      /**
+       * Callouts / `> Note:` — library defaults merge in `#F5F5F5` (mergeStyle),
+       * which breaks dark bubbles (light text on light box). Force theme-aware fill + border.
+       */
       blockquote: {
-        borderLeftWidth: 3,
-        borderLeftColor: onPrimary ? 'rgba(255,255,255,0.45)' : colors.primary,
-        paddingLeft: 10,
-        marginVertical: 6,
-        opacity: onPrimary ? 0.95 : 1,
+        backgroundColor: onPrimary
+          ? 'rgba(0,0,0,0.28)'
+          : isDarkUi
+            ? 'rgba(255,255,255,0.1)'
+            : 'rgba(0,0,0,0.045)',
+        borderLeftWidth: 4,
+        borderLeftColor: onPrimary ? 'rgba(255,255,255,0.65)' : colors.primary,
+        borderTopWidth: 0,
+        borderRightWidth: 0,
+        borderBottomWidth: 0,
+        borderColor: 'transparent',
+        marginLeft: 0,
+        marginVertical: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: 12,
+        overflow: 'hidden' as const,
       },
     }),
-    [codeBg, codeBorder, colors, link, onPrimary, text],
+    [codeBg, codeBorder, colors, isDarkUi, link, onPrimary, text],
   );
 
   return (
