@@ -588,6 +588,8 @@ export default function HomeScreen() {
 
     let lastFlush = Date.now();
     let buffer = "";
+    /** Any non-empty token from the model (used on Stop: discard turn vs keep partial). */
+    let assistantReceivedOutput = false;
 
     try {
       for await (const token of streamChatCompletion({
@@ -597,6 +599,9 @@ export default function HomeScreen() {
         model: effectiveChatModelId,
         signal: abortController.signal,
       })) {
+        if (typeof token === "string" && token.length > 0) {
+          assistantReceivedOutput = true;
+        }
         buffer += token;
         const now = Date.now();
         if (now - lastFlush >= 40) {
@@ -618,19 +623,30 @@ export default function HomeScreen() {
       if (isCancelled) {
         if (!isActiveRun) return;
 
-        // Keep already-streamed assistant content.
-        // Also flush any remaining buffer so the last chunk isn't lost.
+        const pendingBufferHadContent = buffer.length > 0;
         if (buffer) {
           appendAssistantToken(assistantMessageId, buffer);
           buffer = "";
         }
 
+        const keepPartialTurn =
+          assistantReceivedOutput || pendingBufferHadContent;
+
+        if (!keepPartialTurn) {
+          setMessages((previous) =>
+            previous.filter(
+              (m) => m.id !== userMessageId && m.id !== assistantMessageId,
+            ),
+          );
+        }
+
         setError(null);
-        // Restore the composer text so the user can edit/resend quickly.
-        setText(value);
-        requestAnimationFrame(() => {
-          composerInputRef.current?.focus();
-        });
+        if (!keepPartialTurn) {
+          setText(value);
+          requestAnimationFrame(() => {
+            composerInputRef.current?.focus();
+          });
+        }
         return;
       }
 
