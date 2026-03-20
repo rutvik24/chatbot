@@ -7,7 +7,7 @@ This project uses Expo Router (file-based routing) and a small set of well-separ
 - `src/ctx/`: app-wide React context (authentication/session, theme preference, **chat actions** for drawer → new chat, **chat history** for drawer list + apply session)
 - `src/services/`: network + streaming logic for AI; **encrypted local chat history** (`chat-history-storage.ts`)
 - `src/types/`: shared TS types (e.g. chat history store shape)
-- `src/utils/`: helpers (AI credentials storage, **`session-account-storage`** for per-user SecureStore key suffix, **`chat-launch-preference`** for Chat open behavior, env defaults, navigation theme, personalization, **`session-email`** for display labels, error mapping)
+- `src/utils/`: helpers (AI credentials storage, **`session-account-storage`** for per-user SecureStore key suffix, **`chat-launch-preference`** for Chat open behavior, **`chat-message-copy-preference`** for optional whole-message copy, env defaults, navigation theme, personalization, **`session-email`** for display labels, error mapping)
 - `src/constants/`: small shared constants (e.g. theme preference helpers)
 - `src/hooks/`: small state/hooks wrappers (theme + storage)
 

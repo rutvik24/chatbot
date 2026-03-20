@@ -14,3 +14,10 @@ export function getSessionAccountStorageSuffix(
   const safe = email.replace(/[^a-zA-Z0-9._-]/g, "_");
   return safe || null;
 }
+
+/** SecureStore / localStorage key for the Chat “copy whole message” setting (per account). */
+export function getMessageCopyEnabledStorageKey(session: string | null): string {
+  const suffix = getSessionAccountStorageSuffix(session);
+  if (!suffix) return "chat-message-copy-enabled";
+  return `chat-message-copy-enabled-${suffix}`;
+}

@@ -14,6 +14,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   View,
   useColorScheme,
 } from "react-native";
@@ -28,6 +29,11 @@ import { useNativeThemeColors } from "@/hooks/use-native-theme-colors";
 import { useStorageState } from "@/hooks/use-storage-state";
 import type { ChatLaunchPreference } from "@/utils/chat-launch-preference";
 import { getChatLaunchPreferenceStorageKey } from "@/utils/chat-launch-preference";
+import {
+  isMessageCopyEnabledFromStorage,
+  MESSAGE_COPY_ENABLED_VALUE,
+} from "@/utils/chat-message-copy-preference";
+import { getMessageCopyEnabledStorageKey } from "@/utils/session-account-storage";
 import { displayEmailFromSession } from "@/utils/session-email";
 
 type SettingsLinkIcon = {
@@ -244,6 +250,15 @@ export default function SettingsScreen() {
     useStorageState(chatLaunchStorageKey);
   const chatLaunchEffective: ChatLaunchPreference =
     storedChatLaunchPref === "start_fresh" ? "start_fresh" : "resume_recent";
+  const messageCopyStorageKey = useMemo(
+    () => getMessageCopyEnabledStorageKey(session),
+    [session],
+  );
+  const [[, storedMessageCopyPref], setMessageCopyPref] =
+    useStorageState(messageCopyStorageKey);
+  const messageCopyEnabled = isMessageCopyEnabledFromStorage(
+    storedMessageCopyPref,
+  );
   const [isSignOutModalVisible, setIsSignOutModalVisible] = useState(false);
   const [shouldTestBoundary, setShouldTestBoundary] = useState(false);
 
@@ -508,6 +523,40 @@ export default function SettingsScreen() {
             Applies the next time your session loads (e.g. after sign-in or
             restarting the app).
           </AppText>
+          <SettingsCard colors={colors}>
+            <View style={styles.messageCopySwitchRow}>
+              <View style={styles.messageCopySwitchTextCol}>
+                <AppText
+                  style={[styles.messageCopySwitchTitle, { color: colors.text }]}
+                >
+                  Copy messages
+                </AppText>
+                <AppText muted style={styles.messageCopySwitchSubtitle}>
+                  Show a copy button on each chat bubble (raw text / markdown).
+                  Off by default.
+                </AppText>
+              </View>
+              <Switch
+                accessibilityLabel="Copy messages from chat bubbles"
+                value={messageCopyEnabled}
+                onValueChange={(on) =>
+                  setMessageCopyPref(on ? MESSAGE_COPY_ENABLED_VALUE : null)
+                }
+                trackColor={{
+                  false: colors.border,
+                  true: Platform.OS === "ios" ? undefined : colors.primary,
+                }}
+                thumbColor={
+                  Platform.OS === "android"
+                    ? messageCopyEnabled
+                      ? colors.primary
+                      : colors.secondaryText
+                    : undefined
+                }
+                ios_backgroundColor={colors.border}
+              />
+            </View>
+          </SettingsCard>
         </SettingsSection>
 
         {/* Account */}
@@ -799,6 +848,27 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     paddingHorizontal: 4,
     marginTop: 4,
+  },
+  messageCopySwitchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  messageCopySwitchTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  messageCopySwitchTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  messageCopySwitchSubtitle: {
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 18,
   },
   linkRow: {
     flexDirection: "row",

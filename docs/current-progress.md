@@ -53,7 +53,7 @@ Auth/settings scroll screens use **`SafeAreaView` `edges={['bottom','left','righ
 ## Settings (`/(main)/(tabs)/settings`)
 
 - **`TabScreenHeader`** — “Settings” + ☰ (drawer).
-- **`ScrollView`** — profile **hero card** (avatar initial, signed-in email, tap → Profile); **Appearance** as three **chips** (System / Light / Dark) with icons; **Chat** chips (**Recent chat** vs **New chat**) for launch behavior after sign-in / app start — per-account key via `getChatLaunchPreferenceStorageKey` + `useStorageState` (SecureStore on native, `localStorage` on web); **Account** and **Security** grouped cards with icon rows, titles, short descriptions, and chevrons; outlined **Sign out** + helper copy; **sign-out modal** with icon, clearer title/body, Cancel / Sign out.
+- **`ScrollView`** — profile **hero card** (avatar initial, signed-in email, tap → Profile); **Appearance** as three **chips** (System / Light / Dark) with icons; **Chat** chips (**Recent chat** vs **New chat**) for launch behavior after sign-in / app start — per-account key via `getChatLaunchPreferenceStorageKey` + `useStorageState` (SecureStore on native, `localStorage` on web); **Copy messages** switch (default **off**) via `getMessageCopyEnabledStorageKey` (`session-account-storage`) — when on, Chat shows a copy control per bubble (full raw message); **Account** and **Security** grouped cards with icon rows, titles, short descriptions, and chevrons; outlined **Sign out** + helper copy; **sign-out modal** with icon, clearer title/body, Cancel / Sign out.
 - **`__DEV__`** — ErrorBoundary test is a small footer link (not a primary row).
 
 ## Prompt / history

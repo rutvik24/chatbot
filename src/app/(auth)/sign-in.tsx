@@ -88,7 +88,10 @@ export default function SignInScreen() {
     });
 
     if (result.ok) {
-      showToast('Signed in successfully');
+      showToast({
+        title: 'Signed in',
+        message: 'Good to see you again.',
+      });
       router.replace('/');
       return;
     }

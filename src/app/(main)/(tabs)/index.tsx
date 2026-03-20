@@ -3,6 +3,7 @@ import {
   useFocusEffect,
   useNavigation,
 } from "@react-navigation/native";
+import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { SymbolView } from "expo-symbols";
@@ -57,7 +58,11 @@ import {
   getChatModelIdStorageKey,
   getOpenAiCompatibleBaseUrlStorageKey,
 } from "@/utils/ai-credentials-storage";
+import {
+  readMessageCopyEnabledForSession,
+} from "@/utils/chat-message-copy-preference";
 import { getChatLaunchPreference } from "@/utils/chat-launch-preference";
+import { showToast } from "@/utils/toast-bus";
 import {
   getFriendlyChatProviderError,
   logChatProviderError,
@@ -94,6 +99,8 @@ export default function HomeScreen() {
     () => getChatModelIdStorageKey(session),
     [session],
   );
+  /** Re-read from storage on Chat focus — Settings’ `useStorageState` does not update this tab. */
+  const [messageCopyEnabled, setMessageCopyEnabled] = useState(false);
   const [[isKeyLoading, storedAiApiKey], setAiApiKey] =
     useStorageState(storageKey);
   const [[, storedOpenAiBaseUrl], setOpenAiBaseUrl] =
@@ -110,6 +117,25 @@ export default function HomeScreen() {
     const t = storedChatModelId?.trim();
     return t && t.length > 0 ? t : DEFAULT_CHAT_MODEL_ID;
   }, [storedChatModelId]);
+
+  const copyWholeMessage = useCallback(async (raw: string) => {
+    const t = raw?.trim() ?? "";
+    if (!t) return;
+    try {
+      await Clipboard.setStringAsync(t);
+      showToast({
+        variant: "success",
+        title: "Copied",
+        message: "Paste it anywhere — it stays on your clipboard.",
+      });
+    } catch {
+      showToast({
+        variant: "error",
+        title: "Couldn’t copy",
+        message: "Try again, or select the text and copy manually.",
+      });
+    }
+  }, []);
 
   const [error, setError] = useState<string | null>(null);
   const [isMigratingKey, setIsMigratingKey] = useState(false);
@@ -630,6 +656,15 @@ export default function HomeScreen() {
 
       refreshKey();
 
+      void (async () => {
+        try {
+          const on = await readMessageCopyEnabledForSession(session);
+          if (isActive) setMessageCopyEnabled(on);
+        } catch {
+          if (isActive) setMessageCopyEnabled(false);
+        }
+      })();
+
       return () => {
         isActive = false;
       };
@@ -637,6 +672,7 @@ export default function HomeScreen() {
       baseUrlStorageKey,
       modelStorageKey,
       profileStorageKey,
+      session,
       setOpenAiBaseUrl,
       setAiApiKey,
       setProfileJson,
@@ -988,6 +1024,7 @@ export default function HomeScreen() {
             ref={listRef}
             style={styles.messagesList}
             data={chatTimelineRows}
+            extraData={messageCopyEnabled}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.messagesContent}
             keyboardShouldPersistTaps="handled"
@@ -1196,17 +1233,58 @@ export default function HomeScreen() {
                       />
                     )}
                   </View>
-                  <AppText
-                    style={[
-                      styles.messageTime,
-                      {
-                        color: colors.secondaryText,
-                        textAlign: item.role === "user" ? "right" : "left",
-                      },
-                    ]}
-                  >
-                    {formatMessageTime(item.createdAt)}
-                  </AppText>
+                  {(() => {
+                    const isThinkingPlaceholder =
+                      item.role === "assistant" &&
+                      (!item.content || item.content === "...");
+                    const canCopyWhole =
+                      messageCopyEnabled &&
+                      !isThinkingPlaceholder &&
+                      (item.content ?? "").trim().length > 0;
+                    return (
+                      <View
+                        style={[
+                          styles.messageMetaRow,
+                          item.role === "user"
+                            ? styles.messageMetaRowUser
+                            : styles.messageMetaRowAssistant,
+                        ]}
+                      >
+                        {canCopyWhole ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Copy whole message"
+                            hitSlop={10}
+                            onPress={() => void copyWholeMessage(item.content)}
+                            style={({ pressed }) => [
+                              styles.messageCopyButton,
+                              { opacity: pressed ? 0.65 : 1 },
+                            ]}
+                          >
+                            <SymbolView
+                              name={{
+                                ios: "doc.on.doc",
+                                android: "content_copy",
+                                web: "content_copy",
+                              }}
+                              size={18}
+                              tintColor={colors.secondaryText}
+                            />
+                          </Pressable>
+                        ) : null}
+                        <AppText
+                          style={[
+                            styles.messageTime,
+                            {
+                              color: colors.secondaryText,
+                            },
+                          ]}
+                        >
+                          {formatMessageTime(item.createdAt)}
+                        </AppText>
+                      </View>
+                    );
+                  })()}
                 </View>
               )
             }
@@ -1830,10 +1908,28 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 22,
   },
+  messageMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  messageMetaRowUser: {
+    justifyContent: "flex-end",
+    alignSelf: "flex-end",
+  },
+  messageMetaRowAssistant: {
+    justifyContent: "flex-start",
+    alignSelf: "flex-start",
+  },
+  messageCopyButton: {
+    padding: 4,
+    borderRadius: 8,
+  },
   messageTime: {
     fontSize: 11,
     fontWeight: "700",
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
     opacity: 0.85,
     fontVariant: ["tabular-nums"],
   },

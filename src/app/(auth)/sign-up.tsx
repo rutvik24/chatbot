@@ -137,7 +137,12 @@ export default function SignUpScreen() {
 
     const firstName = form.firstName.trim();
     setSuccessMessage('Account created. Taking you to the app…');
-    showToast(firstName ? `Welcome, ${firstName}!` : 'Account created');
+    showToast({
+      title: firstName ? `Welcome, ${firstName}` : 'Account created',
+      message: firstName
+        ? 'Your account is ready — opening the app.'
+        : 'You’re all set. Enjoy the chat.',
+    });
     setForm({
       firstName: '',
       lastName: '',

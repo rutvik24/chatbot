@@ -64,7 +64,11 @@ export default function ForgotPasswordScreen() {
     setSuccess(
       'In a real app, we’d email you a reset link. This demo only confirms your account exists.',
     );
-    showToast('Reset flow completed (demo)');
+    showToast({
+      variant: 'info',
+      title: 'Check your email',
+      message: 'If that address is on file, you’ll get reset steps (demo flow).',
+    });
   };
 
   return (

@@ -63,7 +63,11 @@ function CopyableCodeBlock({
         onPress={async () => {
           try {
             await Clipboard.setStringAsync(code);
-            showToast({ message: 'Copied' });
+            showToast({
+              variant: 'success',
+              title: 'Copied',
+              message: 'Code is on your clipboard.',
+            });
           } catch {
             // If copy fails, we just don't show the success toast.
           }

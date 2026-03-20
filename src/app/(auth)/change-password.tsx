@@ -93,7 +93,10 @@ export default function ChangePasswordScreen() {
     }
 
     setSuccess('Password updated.');
-    showToast('Password changed successfully');
+    showToast({
+      title: 'Password updated',
+      message: 'Your new password is saved.',
+    });
     setForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
     router.back();
   };
