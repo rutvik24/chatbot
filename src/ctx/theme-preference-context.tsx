@@ -6,7 +6,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react';
-import { Appearance, useColorScheme } from 'react-native';
+import { Appearance, useColorScheme, type ColorSchemeName } from 'react-native';
 
 import {
   storedValueForPreference,
@@ -47,8 +47,9 @@ export function ThemePreferenceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isLoading) return;
+    // `null` follows the OS; RN typings omit null on some versions.
     Appearance.setColorScheme(
-      preference === 'system' ? null : preference,
+      (preference === 'system' ? null : preference) as ColorSchemeName,
     );
   }, [isLoading, preference]);
 

@@ -120,7 +120,7 @@ function isSensitiveForUserChat(text: string): boolean {
   const t = text;
   if (/EXPO_PUBLIC_[A-Z0-9_]+/i.test(t)) return true;
   if (
-    /OPENROUTER_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|SUPABASE_[A-Z0-9_]+/i.test(
+    /\bAI_API_KEY\b|OPENROUTER_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|SUPABASE_[A-Z0-9_]+/i.test(
       t,
     )
   ) {
@@ -295,7 +295,7 @@ export function getFriendlyChatProviderError(error: unknown): string {
     return 'Access was denied. Your key may not be allowed to use this model or endpoint.';
   }
   if (error instanceof NotFoundError) {
-    return 'The API returned “not found” (404). Check AI settings: use a full OpenAI-compatible base URL (OpenRouter: https://openrouter.ai/api/v1) and a model id from the model list.';
+    return 'The API returned “not found” (404). Check AI settings: use a full OpenAI-compatible base URL (often ending in /v1) and a model id from the model list.';
   }
   if (error instanceof RateLimitError) {
     const body = error.error as ErrorBody;
@@ -374,7 +374,7 @@ export function getFriendlyChatProviderError(error: unknown): string {
       return 'Access was denied. Check your API key permissions or model access.';
     }
     if (status === 404) {
-      return 'The API returned “not found” (404). Check AI settings: OpenRouter base URL should be https://openrouter.ai/api/v1; pick a valid model from the chat model list.';
+      return 'The API returned “not found” (404). Check AI settings: verify the base URL matches your provider’s API root; pick a valid model from the chat model list.';
     }
     if (status === 429) {
       return 'Too many requests. Wait a moment and try again.';

@@ -21,14 +21,15 @@ The app can use:
 - A saved API key from **Settings → AI settings**, or
 - An Expo public env var at build time.
 
-For local development, set one of:
-- `EXPO_PUBLIC_OPENROUTER_API_KEY`
+For local development, set one of (first non-empty wins in code):
+- `EXPO_PUBLIC_AI_API_KEY`
 - `EXPO_PUBLIC_OPENAI_API_KEY`
+- `EXPO_PUBLIC_OPENROUTER_API_KEY` (legacy alias)
 
 Example `.env.local`:
 
 ```bash
-EXPO_PUBLIC_OPENROUTER_API_KEY="sk-..."
+EXPO_PUBLIC_AI_API_KEY="sk-..."
 ```
 
 Note: Expo `EXPO_PUBLIC_*` values are embedded into the bundle. Do not use production secrets this way.

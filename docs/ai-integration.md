@@ -1,6 +1,6 @@
 # AI Integration (OpenAI-Compatible Streaming)
 
-The app talks to an OpenAI-compatible provider via `src/services/openrouter-chat.ts`.
+The app talks to an OpenAI-compatible provider via `src/services/openai-compatible-chat.ts`.
 
 ## How streaming works
 
@@ -25,7 +25,7 @@ Important implementation detail:
 
 The chat screen loads available models via the **OpenAI SDK** `client.models.list()` (same `baseURL` + API key as chat).
 
-- Default when nothing is saved: `meta-llama/llama-3.2-3b-instruct:free` (OpenRouter per-model free tier; avoids the shared `openrouter/free` pool that rate-limits aggressively)
+- Default when nothing is saved: `meta-llama/llama-3.2-3b-instruct:free` (works with common OpenRouter-style setups; avoids some shared free pools that rate-limit aggressively—change in Chat if your provider uses different ids)
 - The user picks a model from a modal list; the choice is stored per account (secure storage on native, `localStorage` on web)
 - Search filters the list; the current selection is pinned at the top if the API list changes
 - The **model strip** lives **below** the message field inside the composer card
@@ -34,7 +34,7 @@ The chat screen loads available models via the **OpenAI SDK** `client.models.lis
 
 The OpenAI SDK expects `baseURL` to include the API version segment:
 
-- **OpenRouter:** `https://openrouter.ai/api/v1` (entering `https://openrouter.ai` or `https://openrouter.ai/api` is coerced to this.)
+- **Some multi-model gateways** (e.g. openrouter.ai): the app coerces bare host or `/api` to `/api/v1` when the hostname matches.
 - **OpenAI:** `https://api.openai.com/v1`
 - **Other compatible hosts:** usually `https://your-host/v1` when the path is omitted.
 
@@ -45,9 +45,10 @@ The OpenAI SDK expects `baseURL` to include the API version segment:
 The app supports two ways to get AI credentials:
 
 - Saved per-user credentials from **Settings → AI settings**
-- Build-time env defaults:
-  - `EXPO_PUBLIC_OPENROUTER_API_KEY`
+- Build-time env defaults (first match wins):
+  - `EXPO_PUBLIC_AI_API_KEY`
   - `EXPO_PUBLIC_OPENAI_API_KEY`
+  - `EXPO_PUBLIC_OPENROUTER_API_KEY` (legacy alias)
 
 Build-time keys are embedded into the bundle and are intended for local development only.
 

@@ -2,9 +2,9 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
 /**
- * Global API key slot (pre–per-account). Same backing id as early builds
- * (`openrouter-api-key`). Cleared after migration to a per-user key or when
- * the user clears their saved key so it cannot repopulate the field.
+ * Global API key slot (pre–per-account). Backing id unchanged so existing installs
+ * keep their key (`openrouter-api-key`). Cleared after migration to a per-user key
+ * or when the user clears their saved key so it cannot repopulate the field.
  */
 export const GLOBAL_API_KEY_STORAGE_KEY = "openrouter-api-key";
 
@@ -23,7 +23,11 @@ export async function clearGlobalApiKeyStorage(): Promise<void> {
   }
 }
 
-export function getOpenRouterApiKeyStorageKey(session: string | null): string {
+/**
+ * Storage key for the current session’s API key. Uses legacy `openrouter-api-key*`
+ * ids for backward compatibility with existing secure storage entries.
+ */
+export function getAiApiKeyStorageKey(session: string | null): string {
   const email = session?.startsWith("session-")
     ? session.slice("session-".length)
     : null;
@@ -38,7 +42,7 @@ export function getOpenRouterApiKeyStorageKey(session: string | null): string {
     : GLOBAL_API_KEY_STORAGE_KEY;
 }
 
-/** Per-user OpenAI-compatible API base URL (e.g. OpenRouter, local proxy). */
+/** Per-user OpenAI-compatible API base URL (any compatible gateway). */
 export function getOpenAiCompatibleBaseUrlStorageKey(
   session: string | null,
 ): string {
@@ -65,4 +69,3 @@ export function getChatModelIdStorageKey(session: string | null): string {
 
   return safeEmail ? `chat-model-id-${safeEmail}` : "chat-model-id";
 }
-

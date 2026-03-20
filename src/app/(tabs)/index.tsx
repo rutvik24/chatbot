@@ -30,21 +30,21 @@ import {
   listOpenAiCompatibleChatModels,
   streamChatCompletion,
   type ChatMessage,
-} from "@/services/openrouter-chat";
+} from "@/services/openai-compatible-chat";
 import {
   buildChatTimelineRows,
   formatMessageTime,
   type ChatMessageWithTime,
   type ChatTimelineRow,
 } from "@/utils/chat-timeline";
-import { resolveOpenRouterApiKey } from "@/utils/openrouter-env-defaults";
+import { resolveAiApiKey } from "@/utils/ai-api-key-env";
 import {
   GLOBAL_API_KEY_STORAGE_KEY,
   clearGlobalApiKeyStorage,
+  getAiApiKeyStorageKey,
   getChatModelIdStorageKey,
   getOpenAiCompatibleBaseUrlStorageKey,
-  getOpenRouterApiKeyStorageKey,
-} from "@/utils/openrouter-storage";
+} from "@/utils/ai-credentials-storage";
 import {
   getFriendlyChatProviderError,
   logChatProviderError,
@@ -62,7 +62,7 @@ export default function HomeScreen() {
   const [text, setText] = useState("");
   const [messages, setMessages] = useState<ChatMessageWithTime[]>([]);
   const storageKey = useMemo(
-    () => getOpenRouterApiKeyStorageKey(session),
+    () => getAiApiKeyStorageKey(session),
     [session],
   );
   const baseUrlStorageKey = useMemo(
@@ -77,7 +77,7 @@ export default function HomeScreen() {
     () => getChatModelIdStorageKey(session),
     [session],
   );
-  const [[isKeyLoading, storedOpenRouterKey], setOpenRouterKey] =
+  const [[isKeyLoading, storedAiApiKey], setAiApiKey] =
     useStorageState(storageKey);
   const [[, storedOpenAiBaseUrl], setOpenAiBaseUrl] =
     useStorageState(baseUrlStorageKey);
@@ -85,9 +85,9 @@ export default function HomeScreen() {
     useStorageState(profileStorageKey);
   const [[, storedChatModelId], setStoredChatModelId] =
     useStorageState(modelStorageKey);
-  const effectiveOpenRouterKey = useMemo(
-    () => resolveOpenRouterApiKey(storedOpenRouterKey),
-    [storedOpenRouterKey],
+  const effectiveAiApiKey = useMemo(
+    () => resolveAiApiKey(storedAiApiKey),
+    [storedAiApiKey],
   );
   const effectiveChatModelId = useMemo(() => {
     const t = storedChatModelId?.trim();
@@ -150,7 +150,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     modelsListCacheRef.current = null;
-  }, [effectiveOpenRouterKey, storedOpenAiBaseUrl]);
+  }, [effectiveAiApiKey, storedOpenAiBaseUrl]);
 
   const canSend = useMemo(
     () =>
@@ -158,13 +158,13 @@ export default function HomeScreen() {
       !isGenerating &&
       !isSessionLoading &&
       !isMigratingKey &&
-      !!effectiveOpenRouterKey.trim(),
+      !!effectiveAiApiKey.trim(),
     [
       text,
       isGenerating,
       isSessionLoading,
       isMigratingKey,
-      effectiveOpenRouterKey,
+      effectiveAiApiKey,
     ],
   );
 
@@ -304,18 +304,18 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    if (effectiveOpenRouterKey.trim()) {
+    if (effectiveAiApiKey.trim()) {
       setError(null);
     }
-  }, [effectiveOpenRouterKey]);
+  }, [effectiveAiApiKey]);
 
   useEffect(() => {
     if (!modelPickerOpen) return;
-    if (!effectiveOpenRouterKey.trim() || isKeyLoading || isSessionLoading) {
+    if (!effectiveAiApiKey.trim() || isKeyLoading || isSessionLoading) {
       return;
     }
 
-    const signature = `${effectiveOpenRouterKey}\0${storedOpenAiBaseUrl ?? ""}`;
+    const signature = `${effectiveAiApiKey}\0${storedOpenAiBaseUrl ?? ""}`;
     const cache = modelsListCacheRef.current;
     const staleMs = 120_000;
     if (
@@ -338,7 +338,7 @@ export default function HomeScreen() {
     (async () => {
       try {
         const ids = await listOpenAiCompatibleChatModels({
-          apiKey: effectiveOpenRouterKey,
+          apiKey: effectiveAiApiKey,
           baseURL: storedOpenAiBaseUrl,
           signal: ac.signal,
         });
@@ -369,7 +369,7 @@ export default function HomeScreen() {
     };
   }, [
     modelPickerOpen,
-    effectiveOpenRouterKey,
+    effectiveAiApiKey,
     storedOpenAiBaseUrl,
     isKeyLoading,
     isSessionLoading,
@@ -391,7 +391,7 @@ export default function HomeScreen() {
     if (isKeyLoading) return;
     if (!session) return;
     if (storageKey === GLOBAL_API_KEY_STORAGE_KEY) return;
-    if (storedOpenRouterKey) return; // per-user key already exists
+    if (storedAiApiKey) return; // per-user key already exists
 
     let cancelled = false;
     (async () => {
@@ -405,7 +405,7 @@ export default function HomeScreen() {
             : await SecureStore.getItemAsync(GLOBAL_API_KEY_STORAGE_KEY);
 
         if (!cancelled && next) {
-          setOpenRouterKey(next);
+          setAiApiKey(next);
           await clearGlobalApiKeyStorage();
         }
       } finally {
@@ -420,8 +420,8 @@ export default function HomeScreen() {
     isKeyLoading,
     session,
     storageKey,
-    storedOpenRouterKey,
-    setOpenRouterKey,
+    storedAiApiKey,
+    setAiApiKey,
   ]);
 
   // If the user updates the key in the Settings screen, the tab might remain mounted.
@@ -439,7 +439,7 @@ export default function HomeScreen() {
             const profileNext = localStorage.getItem(profileStorageKey);
             const modelNext = localStorage.getItem(modelStorageKey);
             if (isActive) {
-              setOpenRouterKey(keyNext);
+              setAiApiKey(keyNext);
               setOpenAiBaseUrl(urlNext);
               setProfileJson(profileNext);
               setStoredChatModelId(modelNext);
@@ -454,7 +454,7 @@ export default function HomeScreen() {
             SecureStore.getItemAsync(modelStorageKey),
           ]);
           if (isActive) {
-            setOpenRouterKey(keyNext);
+            setAiApiKey(keyNext);
             setOpenAiBaseUrl(urlNext);
             setProfileJson(profileNext);
             setStoredChatModelId(modelNext);
@@ -474,7 +474,7 @@ export default function HomeScreen() {
       modelStorageKey,
       profileStorageKey,
       setOpenAiBaseUrl,
-      setOpenRouterKey,
+      setAiApiKey,
       setProfileJson,
       setStoredChatModelId,
       storageKey,
@@ -509,12 +509,12 @@ export default function HomeScreen() {
     }
 
     // Wait for key storage unless an env default is available.
-    if (isKeyLoading && !resolveOpenRouterApiKey(storedOpenRouterKey).trim()) {
+    if (isKeyLoading && !resolveAiApiKey(storedAiApiKey).trim()) {
       return;
     }
 
-    if (!effectiveOpenRouterKey.trim()) {
-      setError("OpenRouter API key for your account is missing. Add it now.");
+    if (!effectiveAiApiKey.trim()) {
+      setError("API key for your account is missing. Add it in AI settings.");
       return;
     }
 
@@ -593,7 +593,7 @@ export default function HomeScreen() {
 
     try {
       for await (const token of streamChatCompletion({
-        apiKey: effectiveOpenRouterKey,
+        apiKey: effectiveAiApiKey,
         baseURL: storedOpenAiBaseUrl,
         messages: history,
         model: effectiveChatModelId,
@@ -675,16 +675,16 @@ export default function HomeScreen() {
   };
 
   const handleRetryLoadModels = useCallback(() => {
-    if (!effectiveOpenRouterKey.trim()) return;
+    if (!effectiveAiApiKey.trim()) return;
     modelsListCacheRef.current = null;
     setModelsStatus("loading");
     setModelsErrorMessage(null);
     void listOpenAiCompatibleChatModels({
-      apiKey: effectiveOpenRouterKey,
+      apiKey: effectiveAiApiKey,
       baseURL: storedOpenAiBaseUrl,
     })
       .then((ids) => {
-        const signature = `${effectiveOpenRouterKey}\0${storedOpenAiBaseUrl ?? ""}`;
+        const signature = `${effectiveAiApiKey}\0${storedOpenAiBaseUrl ?? ""}`;
         modelsListCacheRef.current = {
           signature,
           fetchedAt: Date.now(),
@@ -701,7 +701,7 @@ export default function HomeScreen() {
         );
         setAvailableModels([]);
       });
-  }, [effectiveOpenRouterKey, storedOpenAiBaseUrl]);
+  }, [effectiveAiApiKey, storedOpenAiBaseUrl]);
 
   return (
     <SafeAreaView
@@ -954,7 +954,7 @@ export default function HomeScreen() {
               </Pressable>
             </View>
 
-            {!effectiveOpenRouterKey.trim() ? (
+            {!effectiveAiApiKey.trim() ? (
               <View style={styles.composerInlineHintWrap}>
                 <AppText
                   muted
@@ -989,17 +989,17 @@ export default function HomeScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Choose AI model"
-              accessibilityState={{ disabled: !effectiveOpenRouterKey.trim() }}
+              accessibilityState={{ disabled: !effectiveAiApiKey.trim() }}
               onPress={() => {
                 setModelSearch("");
                 setModelPickerOpen(true);
               }}
-              disabled={!effectiveOpenRouterKey.trim()}
+              disabled={!effectiveAiApiKey.trim()}
               style={({ pressed }) => [
                 styles.composerModelStrip,
                 {
                   borderTopColor: colors.border,
-                  opacity: !effectiveOpenRouterKey.trim()
+                  opacity: !effectiveAiApiKey.trim()
                     ? 0.65
                     : pressed
                       ? 0.92
@@ -1037,7 +1037,7 @@ export default function HomeScreen() {
                   numberOfLines={1}
                   style={[styles.composerModelName, { color: colors.text }]}
                 >
-                  {effectiveOpenRouterKey.trim()
+                  {effectiveAiApiKey.trim()
                     ? effectiveChatModelId
                     : "Add an API key to chat"}
                 </AppText>
@@ -1065,7 +1065,7 @@ export default function HomeScreen() {
             </AppText>
           ) : null}
           {error ===
-          "OpenRouter API key for your account is missing. Add it now." ? (
+          "API key for your account is missing. Add it in AI settings." ? (
             <Pressable
               onPress={() => router.push("/settings-ai")}
               style={styles.errorLink}

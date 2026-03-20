@@ -18,41 +18,41 @@ import {
   DEFAULT_OPENAI_COMPAT_BASE_URL,
   coerceOpenAiCompatibleBaseUrl,
   normalizeOpenAiCompatibleBaseUrl,
-} from "@/services/openrouter-chat";
-import { hasEnvDefaultOpenRouterApiKey } from "@/utils/openrouter-env-defaults";
+} from "@/services/openai-compatible-chat";
+import { hasEnvDefaultAiApiKey } from "@/utils/ai-api-key-env";
 import {
   GLOBAL_API_KEY_STORAGE_KEY,
   clearGlobalApiKeyStorage,
+  getAiApiKeyStorageKey,
   getOpenAiCompatibleBaseUrlStorageKey,
-  getOpenRouterApiKeyStorageKey,
-} from "@/utils/openrouter-storage";
+} from "@/utils/ai-credentials-storage";
 
 export default function SettingsAiScreen() {
   useColorScheme();
   const colors = useNativeThemeColors();
   const { session, isLoading: isSessionLoading } = useSession();
   const storageKey = useMemo(
-    () => getOpenRouterApiKeyStorageKey(session),
+    () => getAiApiKeyStorageKey(session),
     [session],
   );
   const baseUrlStorageKey = useMemo(
     () => getOpenAiCompatibleBaseUrlStorageKey(session),
     [session],
   );
-  const [[isKeyLoading, storedOpenRouterKey], setOpenRouterKey] =
+  const [[isKeyLoading, storedAiApiKey], setAiApiKey] =
     useStorageState(storageKey);
   const [[isBaseUrlLoading, storedBaseUrl], setStoredBaseUrl] =
     useStorageState(baseUrlStorageKey);
 
-  const [input, setInput] = useState(storedOpenRouterKey ?? "");
+  const [input, setInput] = useState(storedAiApiKey ?? "");
   const [baseUrlInput, setBaseUrlInput] = useState(
     storedBaseUrl ?? DEFAULT_OPENAI_COMPAT_BASE_URL,
   );
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    setInput(storedOpenRouterKey ?? "");
-  }, [storedOpenRouterKey, storageKey]);
+    setInput(storedAiApiKey ?? "");
+  }, [storedAiApiKey, storageKey]);
 
   useEffect(() => {
     setBaseUrlInput(storedBaseUrl ?? DEFAULT_OPENAI_COMPAT_BASE_URL);
@@ -65,7 +65,7 @@ export default function SettingsAiScreen() {
     if (isSessionLoading) return;
     if (!session) return;
     if (storageKey === GLOBAL_API_KEY_STORAGE_KEY) return;
-    if (storedOpenRouterKey) return;
+    if (storedAiApiKey) return;
 
     let cancelled = false;
     (async () => {
@@ -78,7 +78,7 @@ export default function SettingsAiScreen() {
             : await SecureStore.getItemAsync(GLOBAL_API_KEY_STORAGE_KEY);
 
         if (!cancelled && next) {
-          setOpenRouterKey(next);
+          setAiApiKey(next);
           await clearGlobalApiKeyStorage();
         }
       } catch {
@@ -94,29 +94,29 @@ export default function SettingsAiScreen() {
     isSessionLoading,
     session,
     storageKey,
-    storedOpenRouterKey,
-    setOpenRouterKey,
+    storedAiApiKey,
+    setAiApiKey,
   ]);
 
-  const saveOpenRouterKey = () => {
+  const saveAiApiKey = () => {
     if (isSessionLoading || !session) {
       setMessage("Please sign in before saving your API key.");
       return;
     }
     if (!input.trim()) {
-      setMessage("Please enter a valid OpenRouter API key.");
+      setMessage("Please enter a valid API key.");
       return;
     }
-    setOpenRouterKey(input.trim());
-    setMessage("OpenRouter API key saved securely for your account.");
+    setAiApiKey(input.trim());
+    setMessage("API key saved securely for your account.");
   };
 
-  const clearOpenRouterKey = async () => {
+  const clearAiApiKey = async () => {
     // Remove global slot first so the migration effect cannot repopulate the field.
     await clearGlobalApiKeyStorage();
-    setOpenRouterKey(null);
+    setAiApiKey(null);
     setInput("");
-    setMessage("OpenRouter API key cleared for your account.");
+    setMessage("API key cleared for your account.");
   };
 
   const saveBaseUrl = () => {
@@ -130,21 +130,21 @@ export default function SettingsAiScreen() {
       if (coerced === DEFAULT_OPENAI_COMPAT_BASE_URL) {
         setStoredBaseUrl(null);
         setBaseUrlInput(DEFAULT_OPENAI_COMPAT_BASE_URL);
-        setMessage("Using default OpenRouter base URL.");
+        setMessage("Using the app’s default base URL.");
         return;
       }
       setStoredBaseUrl(coerced);
       setBaseUrlInput(coerced);
       setMessage("Base URL saved.");
     } catch {
-      setMessage("Enter a valid URL (https://…), e.g. OpenRouter or a proxy.");
+      setMessage("Enter a valid URL (https://…), e.g. your provider’s API root.");
     }
   };
 
   const resetBaseUrlToDefault = () => {
     setStoredBaseUrl(null);
     setBaseUrlInput(DEFAULT_OPENAI_COMPAT_BASE_URL);
-    setMessage("Reset to default OpenRouter base URL.");
+    setMessage("Reset to the app’s default base URL.");
   };
 
   return (
@@ -179,8 +179,8 @@ export default function SettingsAiScreen() {
             onSubmitEditing={saveBaseUrl}
           />
           <AppText muted style={styles.hint}>
-            If you only enter a host (e.g. openrouter.ai), the app adds the right
-            path: OpenRouter → /api/v1, most other APIs → /v1. Pick the model in
+            If you only enter a host, the app appends the usual API path where
+            possible (often /v1; some gateways use /api/v1). Pick the model in
             Chat. Wrong base URLs often return “not found” (404).
           </AppText>
           <View style={styles.buttonRow}>
@@ -204,11 +204,11 @@ export default function SettingsAiScreen() {
             isPasswordField
             placeholder="sk-or-v1-..."
             returnKeyType="done"
-            onSubmitEditing={saveOpenRouterKey}
+            onSubmitEditing={saveAiApiKey}
           />
           {!isKeyLoading &&
-          !storedOpenRouterKey?.trim() &&
-          hasEnvDefaultOpenRouterApiKey() ? (
+          !storedAiApiKey?.trim() &&
+          hasEnvDefaultAiApiKey() ? (
             <AppText muted style={styles.hint}>
               No key saved for this account. Chat may use a default key from
               your build until you save one here.
@@ -218,13 +218,13 @@ export default function SettingsAiScreen() {
           <View style={styles.buttonRow}>
             <AppButton
               label="Save API key"
-              onPress={saveOpenRouterKey}
+              onPress={saveAiApiKey}
               style={styles.rowButton}
             />
             <AppButton
               label="Clear API key"
               variant="secondary"
-              onPress={clearOpenRouterKey}
+              onPress={clearAiApiKey}
               style={styles.rowButton}
             />
           </View>

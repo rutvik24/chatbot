@@ -8,12 +8,12 @@ export type ChatMessage = {
   content: string;
 };
 
-/** Default OpenAI-compatible endpoint (OpenRouter). */
+/** Bundled default: OpenAI-compatible endpoint (works with OpenRouter-style gateways). */
 export const DEFAULT_OPENAI_COMPAT_BASE_URL = 'https://openrouter.ai/api/v1';
 
 /**
- * Default when no model is saved. Avoids `openrouter/free` (shared pool, very strict 429s).
- * If this id is unavailable for your key, open the model picker and choose another `:free` model.
+ * Default when no model is saved. On OpenRouter, avoids the shared `openrouter/free`
+ * pool (very strict 429s). If unavailable for your provider, pick another model in Chat.
  */
 export const DEFAULT_CHAT_MODEL_ID =
   'meta-llama/llama-3.2-3b-instruct:free';
@@ -43,7 +43,7 @@ export function normalizeOpenAiCompatibleBaseUrl(input: string): string {
 
 /**
  * Appends the version path OpenAI-compatible clients expect when the user omits it.
- * Fixes 404s from `https://openrouter.ai` (needs `/api/v1`) vs `https://api.openai.com` (`/v1`).
+ * Handles common hosts (e.g. openrouter.ai → `/api/v1`, api.openai.com → `/v1`).
  */
 export function coerceOpenAiCompatibleBaseUrl(normalized: string): string {
   let url: URL;
@@ -96,15 +96,16 @@ export function resolveOpenAiCompatibleBaseUrl(
 function getOpenAiClient(apiKey: string, baseURL: string) {
   ensureExpoFetchPatched();
 
-  const isOpenRouter = baseURL.toLowerCase().includes('openrouter.ai');
+  /** Some gateways document optional Referer/title headers for usage attribution. */
+  const attachRankingHeaders = baseURL.toLowerCase().includes('openrouter.ai');
 
   return new OpenAI({
     apiKey,
     baseURL,
     dangerouslyAllowBrowser: true,
-    /** Retries on 429/5xx multiply requests and make OpenRouter free-tier limits feel worse. */
+    /** Retries on 429/5xx multiply requests and worsen rate limits on free tiers. */
     maxRetries: 0,
-    defaultHeaders: isOpenRouter
+    defaultHeaders: attachRankingHeaders
       ? {
           'HTTP-Referer': 'https://expo.dev',
           'X-Title': 'Chat App',
@@ -173,4 +174,3 @@ export async function listOpenAiCompatibleChatModels(params: {
 
   return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
 }
-

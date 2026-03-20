@@ -11,17 +11,17 @@ OpenAI-compatible AI credentials are stored via:
 
 The storage keys are derived from the current user session/email, so each account can have different:
 
-- OpenRouter API key
+- OpenAI-compatible API key
 - OpenAI-compatible base URL (endpoint/gateway)
 
 See:
 
-- `src/utils/openrouter-storage.ts`
+- `src/utils/ai-credentials-storage.ts`
 - `src/hooks/use-storage-state.ts`
 
 ## Legacy migration behavior
 
-There is a legacy global API key slot (`openrouter-api-key`).
+There is a legacy global API key slot (backing id `openrouter-api-key`, unchanged so existing installs keep data).
 
 The app migrates it to per-account storage and then clears the global slot after the per-user key exists.
 
@@ -35,8 +35,9 @@ Appearance choice (system / light / dark) is stored with the same storage helper
 
 The app can also fall back to build-time public env vars:
 
-- `EXPO_PUBLIC_OPENROUTER_API_KEY`
+- `EXPO_PUBLIC_AI_API_KEY`
 - `EXPO_PUBLIC_OPENAI_API_KEY`
+- `EXPO_PUBLIC_OPENROUTER_API_KEY` (legacy alias)
 
 Expo `EXPO_PUBLIC_*` values are embedded into the app bundle.
 

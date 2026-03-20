@@ -1,6 +1,6 @@
 # Chat App
 
-Expo Router chat app with per-user OpenAI-compatible AI streaming (OpenRouter by default).
+Expo Router chat app with per-user **OpenAI-compatible** AI streaming (any gateway that exposes the chat completions API).
 
 ## Docs Navigation
 
@@ -23,7 +23,7 @@ Expo Router chat app with per-user OpenAI-compatible AI streaming (OpenRouter by
 - **AI settings** — Per-account OpenAI-compatible API key + base URL (`src/app/(auth)/settings-ai.tsx`); optional build-time env fallback (see `.env.example`).
 - **Appearance** — Settings → **System / Light / Dark**; persisted on-device; uses `Appearance.setColorScheme` via `src/ctx/theme-preference-context.tsx` (applies before and after sign-in).
 - **Chat** (`src/app/(tabs)/index.tsx`):
-  - **Streaming** replies from OpenAI-compatible APIs (`src/services/openrouter-chat.ts`).
+  - **Streaming** replies via OpenAI-compatible APIs (`src/services/openai-compatible-chat.ts`).
   - **Composer** — Message field first, **model strip** below (sparkles + model id); modal model list with search (SDK `models.list`, ~2 min cache when reopening).
   - **Messages** — User vs assistant bubbles (markdown for both; user bubble uses `onPrimary` tone), **timestamps**, **day section** headers (Today / Yesterday / date).
   - **Scroll** — Auto-scroll only when you’re near the bottom; **Catch up / Latest** floating button when scrolled up; sticky follow after Catch up during streaming (instant `scrollToEnd` + layout passes).
@@ -37,7 +37,7 @@ Expo Router chat app with per-user OpenAI-compatible AI streaming (OpenRouter by
 - Auth is a **mock** (no real backend). Passwords and sessions are local.
 - Forgot password is **mocked** (no email).
 - **No** persisted conversation history (messages are in-memory on the chat screen).
-- Default model id is `DEFAULT_CHAT_MODEL_ID` in `openrouter-chat.ts` (avoid shared `openrouter/free` pool where possible).
+- Default model id is `DEFAULT_CHAT_MODEL_ID` in `openai-compatible-chat.ts` (bundled default targets a common free-tier model id; pick another in Chat if your provider differs).
 
 ## Quick Start
 

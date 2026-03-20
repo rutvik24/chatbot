@@ -28,7 +28,7 @@ Root `src/app/_layout.tsx`: `ThemePreferenceProvider` → `SessionProvider` → 
 - **Stop** — `AbortController`; cancellation is not shown as an error in the bubble.
   - **No assistant output yet** — last user message + empty assistant row removed; same text restored to the composer (edit/resend).
   - **Any tokens received** — user + partial assistant messages kept; composer not refilled.
-- **Model** — Modal list from `client.models.list()` when opened; selection stored per account; default model in `DEFAULT_CHAT_MODEL_ID` (`openrouter-chat.ts`).
+- **Model** — Modal list from `client.models.list()` when opened; selection stored per account; default model in `DEFAULT_CHAT_MODEL_ID` (`openai-compatible-chat.ts`).
 - **Scroll** — `shouldAutoScrollRef` + **stick-to-bottom** after send or **Catch up**; `onContentSizeChange` + scheduled `scrollToEnd` while following; wider cancel threshold while generating so layout jitter doesn’t drop follow mode.
 - **Catch up / Latest** — Floating button above the composer when not at bottom; **Catch up** variant while generating; docked with elevation so it stays visible on Android.
 - **UI** — Day pills with calendar icon; message times; user primary bubble vs assistant surface bubble (shadows / elevation); unified composer card (outer shadow, inner clip).
