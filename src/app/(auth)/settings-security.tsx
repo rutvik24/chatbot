@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { ScrollView, StyleSheet, useColorScheme } from 'react-native';
+import { Platform, ScrollView, StyleSheet, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton, AppText } from '@/components/common';
@@ -12,9 +12,16 @@ export default function SettingsSecurityScreen() {
   const { signOut } = useSession();
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <AppText style={styles.title}>Security</AppText>
+    <SafeAreaView
+      edges={['bottom', 'left', 'right']}
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
+      <ScrollView
+        contentContainerStyle={styles.content}
+        contentInsetAdjustmentBehavior={
+          Platform.OS === 'ios' ? 'automatic' : undefined
+        }
+      >
         <AppText muted>Manage password and account session.</AppText>
 
         <AppButton label="Change Password" onPress={() => router.push('/change-password')} />
@@ -27,5 +34,4 @@ export default function SettingsSecurityScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16, gap: 12 },
-  title: { fontSize: 26, fontWeight: '700' },
 });

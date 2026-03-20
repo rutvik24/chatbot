@@ -1,31 +1,20 @@
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-} from "@react-navigation/native";
+import { ThemeProvider } from "@react-navigation/native";
 import { SplashScreen, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { SymbolView } from "expo-symbols";
-import { useEffect } from "react";
-import { Pressable, StyleSheet, useColorScheme, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useEffect, useMemo } from "react";
+import { Platform, useColorScheme } from "react-native";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import ErrorBoundary from "@/components/error-boundary";
-import { AppText } from "@/components/common";
 import ToastOverlay from "@/components/toast-overlay";
 import { SessionProvider, useSession } from "@/ctx/auth-context";
 import {
   ThemePreferenceProvider,
   useThemePreference,
 } from "@/ctx/theme-preference-context";
-import { useNativeThemeColors } from "@/hooks/use-native-theme-colors";
+import { createAppNavigationTheme } from "@/utils/navigation-theme";
 
 SplashScreen.preventAutoHideAsync();
-
-function asHeaderColor(value: unknown, fallback: string) {
-  return typeof value === "string" ? value : fallback;
-}
 
 export default function RootLayout() {
   return (
@@ -42,18 +31,10 @@ export default function RootLayout() {
 function RootNavigator() {
   useColorScheme();
   const { resolvedColorScheme } = useThemePreference();
-  const colors = useNativeThemeColors();
-  const headerBackground = asHeaderColor(
-    colors.background,
-    resolvedColorScheme === "dark" ? "#000000" : "#FFFFFF",
+  const navigationTheme = useMemo(
+    () => createAppNavigationTheme(resolvedColorScheme),
+    [resolvedColorScheme],
   );
-  const headerText = asHeaderColor(
-    colors.text,
-    resolvedColorScheme === "dark" ? "#FFFFFF" : "#111827",
-  );
-  const compactHeaderStyle = {
-    backgroundColor: headerBackground,
-  };
   const { session, isLoading } = useSession();
 
   useEffect(() => {
@@ -63,103 +44,99 @@ function RootNavigator() {
   }, [isLoading]);
 
   return (
-    <ThemeProvider
-      value={resolvedColorScheme === "dark" ? DarkTheme : DefaultTheme}
-    >
+    <ThemeProvider value={navigationTheme}>
       <StatusBar
         style={resolvedColorScheme === "dark" ? "light" : "dark"}
       />
       <AnimatedSplashOverlay />
       <ToastOverlay />
       <Stack
-        screenOptions={{
+        screenOptions={({ theme }) => ({
           headerShown: false,
-          headerTitle: "",
-          headerBackButtonDisplayMode: "minimal",
-          headerStyle: compactHeaderStyle,
-          headerTintColor: headerText,
+          headerStyle: {
+            backgroundColor: theme.colors.card,
+          },
+          headerTintColor: theme.colors.primary,
+          headerTitleStyle: { color: theme.colors.text },
+          headerLargeTitleStyle: { color: theme.colors.text },
+          headerLargeStyle: {
+            backgroundColor: theme.colors.card,
+          },
           headerShadowVisible: false,
-          header: ({ navigation }) => (
-            <SafeAreaView
-              edges={["top"]}
-              style={[
-                styles.headerSafeArea,
-                { backgroundColor: headerBackground },
-              ]}
-            >
-              <View style={styles.headerContent}>
-                <Pressable
-                  onPress={() => navigation.goBack()}
-                  hitSlop={8}
-                  style={styles.backButton}
-                >
-                  <SymbolView
-                    name={{
-                      ios: "chevron.left",
-                      android: "arrow_back",
-                      web: "arrow_back",
-                    }}
-                    size={10}
-                    tintColor={headerText}
-                  />
-                  <AppText style={[styles.backText, { color: headerText }]}>
-                    Back
-                  </AppText>
-                </Pressable>
-              </View>
-            </SafeAreaView>
-          ),
-        }}
+          contentStyle: { backgroundColor: theme.colors.background },
+          /** Solid bar so theme background isn’t overridden by system blur. */
+          headerBlurEffect:
+            Platform.OS === "ios" ? ("none" as const) : undefined,
+          /**
+           * iOS: chevron + “Back” label when space allows (native behavior).
+           * Android: default material back + previous route title when applicable.
+           */
+          headerBackButtonDisplayMode:
+            Platform.OS === "ios" ? "generic" : "default",
+          /**
+           * Large titles are scroll-linked; short/centered ScrollViews often leave the
+           * title blank until the user scrolls. Use a normal inline title everywhere.
+           */
+          headerLargeTitleEnabled: false,
+        })}
       >
         <Stack.Protected guard={!!session}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen
             name="(auth)/change-password"
-            options={{ headerShown: true }}
+            options={{
+              headerShown: true,
+              title: "Change password",
+            }}
           />
           <Stack.Screen
             name="(auth)/settings-profile"
-            options={{ headerShown: true }}
+            options={{
+              headerShown: true,
+              title: "Profile",
+            }}
           />
           <Stack.Screen
             name="(auth)/settings-security"
-            options={{ headerShown: true }}
+            options={{
+              headerShown: true,
+              title: "Security",
+            }}
           />
           <Stack.Screen
             name="(auth)/settings-ai"
-            options={{ headerShown: true }}
+            options={{
+              headerShown: true,
+              title: "AI settings",
+            }}
           />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
-          <Stack.Screen name="(auth)/sign-in" options={{ headerShown: false }} />
-          <Stack.Screen name="(auth)/sign-up" options={{ headerShown: true }} />
+          <Stack.Screen
+            name="(auth)/sign-in"
+            options={{
+              headerShown: true,
+              title: "Sign in",
+              /** Root of the logged-out stack — no back affordance. */
+              headerBackVisible: false,
+            }}
+          />
+          <Stack.Screen
+            name="(auth)/sign-up"
+            options={{
+              headerShown: true,
+              title: "Create account",
+            }}
+          />
           <Stack.Screen
             name="(auth)/forgot-password"
-            options={{ headerShown: true }}
+            options={{
+              headerShown: true,
+              title: "Forgot password",
+            }}
           />
         </Stack.Protected>
       </Stack>
     </ThemeProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  headerSafeArea: {
-    width: "100%",
-  },
-  headerContent: {
-    paddingHorizontal: 12,
-    justifyContent: "center",
-  },
-  backButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    alignSelf: "flex-start",
-  },
-  backText: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-});
-

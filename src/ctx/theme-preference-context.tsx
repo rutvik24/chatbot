@@ -2,13 +2,14 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   type ReactNode,
 } from 'react';
-import { Appearance, useColorScheme, type ColorSchemeName } from 'react-native';
+import { Appearance, useColorScheme } from 'react-native';
 
 import {
+  resolveColorSchemeFromPreference,
   storedValueForPreference,
   THEME_PREFERENCE_STORAGE_KEY,
   themePreferenceFromStored,
@@ -45,12 +46,13 @@ export function ThemePreferenceProvider({ children }: { children: ReactNode }) {
     [stored],
   );
 
-  useEffect(() => {
+  // Run before paint so the first frame matches stored preference (avoids dark
+  // native header + light JS content flash on iOS).
+  useLayoutEffect(() => {
     if (isLoading) return;
-    // `null` follows the OS; RN typings omit null on some versions.
-    Appearance.setColorScheme(
-      (preference === 'system' ? null : preference) as ColorSchemeName,
-    );
+    // Android crashes if `null` is passed (native param is non-null). RN expects
+    // `'unspecified'` to follow the device theme (see Appearance.setColorScheme).
+    Appearance.setColorScheme(preference === 'system' ? 'unspecified' : preference);
   }, [isLoading, preference]);
 
   const setPreference = useCallback(
@@ -61,8 +63,10 @@ export function ThemePreferenceProvider({ children }: { children: ReactNode }) {
   );
 
   const systemScheme = useColorScheme();
-  const resolvedColorScheme: 'light' | 'dark' =
-    systemScheme === 'dark' ? 'dark' : 'light';
+  const resolvedColorScheme = resolveColorSchemeFromPreference(
+    preference,
+    systemScheme,
+  );
 
   const value = useMemo(
     (): ThemePreferenceContextValue => ({

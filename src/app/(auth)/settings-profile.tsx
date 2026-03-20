@@ -87,13 +87,21 @@ export default function SettingsProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      edges={['bottom', 'left', 'right']}
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <AppText style={styles.title}>Profile</AppText>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        contentInsetAdjustmentBehavior={
+          Platform.OS === 'ios' ? 'automatic' : undefined
+        }
+      >
         <AppText muted numberOfLines={1}>
           Email: {email || 'Unknown'}
         </AppText>
@@ -135,7 +143,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   keyboardAvoid: { flex: 1 },
   content: { padding: 16, gap: 12 },
-  title: { fontSize: 26, fontWeight: '700' },
   nameRow: { flexDirection: 'row', gap: 8 },
   nameInput: { flex: 1 },
   message: { fontSize: 13, fontWeight: '600' },

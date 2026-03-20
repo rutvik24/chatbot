@@ -149,6 +149,7 @@ export default function SettingsAiScreen() {
 
   return (
     <SafeAreaView
+      edges={["bottom", "left", "right"]}
       style={[styles.container, { backgroundColor: colors.background }]}
     >
       <KeyboardAvoidingView
@@ -159,8 +160,10 @@ export default function SettingsAiScreen() {
         <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
+          contentInsetAdjustmentBehavior={
+            Platform.OS === "ios" ? "automatic" : undefined
+          }
         >
-          <AppText style={styles.title}>AI settings</AppText>
           <AppText muted>
             {isKeyLoading || isBaseUrlLoading
               ? "Loading settings..."
@@ -248,7 +251,6 @@ const styles = StyleSheet.create({
     gap: 12,
     alignItems: "stretch",
   },
-  title: { fontSize: 26, fontWeight: "700" },
   message: { fontSize: 13, fontWeight: "600" },
   hint: { fontSize: 13, lineHeight: 18 },
   buttonRow: {

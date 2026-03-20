@@ -6,7 +6,7 @@ The app uses Expo Router color semantics, optional **user appearance override**,
 
 **Settings → Appearance** offers:
 
-- **System** — follow the device (`Appearance.setColorScheme(null)`)
+- **System** — follow the device (`Appearance.setColorScheme('unspecified')`; `null` crashes on Android)
 - **Light** / **Dark** — lock the app (`Appearance.setColorScheme('light' | 'dark')`)
 
 Implementation:
@@ -24,9 +24,9 @@ React Navigation’s `ThemeProvider` and `expo-status-bar` `StatusBar` use **`re
 - `background`, `surface`, `text`, `secondaryText`
 - `primary`, `border`, `error`, `success`, `placeholder`
 
-Colors use Expo Router’s `Color` API on iOS/Android; **web** uses fallbacks keyed off `useColorScheme()` (which updates after `Appearance.setColorScheme`).
+**iOS** uses Expo Router’s `Color.ios.*`. **Android** uses a static Material-style palette from `materialAndroidUiColors()` keyed off `resolvedColorScheme` — `Color.android.dynamic.*` follows **device** night mode and ignores `Appearance.setColorScheme`, which made Light/Dark in Settings look reversed. **Web** uses hex fallbacks.
 
-Components that use these colors should trigger re-renders on scheme changes — `useNativeThemeColors()` calls `useColorScheme()` internally.
+Components that use these colors should re-render when appearance changes — `useNativeThemeColors()` uses `useThemePreference().resolvedColorScheme` (and still subscribes via `useColorScheme()` for system mode).
 
 ## Markdown and chat bubbles
 

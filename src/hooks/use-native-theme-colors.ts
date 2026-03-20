@@ -1,59 +1,69 @@
 import { Color } from 'expo-router';
 import { Platform, useColorScheme } from 'react-native';
 
+import { useThemePreference } from '@/ctx/theme-preference-context';
+import { materialAndroidUiColors } from '@/utils/navigation-theme';
+
 /**
- * Semantic colors from the Expo Router `Color` API (iOS/Android) with web fallbacks.
- * Follows `useColorScheme()` after the user’s choice is applied via `Appearance.setColorScheme`
- * (see Settings → Appearance and `ThemePreferenceProvider`).
+ * Semantic colors from the Expo Router `Color` API (iOS) with web fallbacks.
+ * Android uses {@link materialAndroidUiColors} so UI matches Settings → Appearance
+ * (`Appearance.setColorScheme`); dynamic Material tokens follow device night mode only.
  */
 export function useNativeThemeColors() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
+  useColorScheme();
+  const { resolvedColorScheme } = useThemePreference();
+  const isDark = resolvedColorScheme === 'dark';
+
+  if (Platform.OS === 'android') {
+    const c = materialAndroidUiColors(isDark);
+    return {
+      background: c.background,
+      surface: c.surface,
+      text: c.text,
+      secondaryText: c.secondaryText,
+      primary: c.primary,
+      border: c.border,
+      error: c.error,
+      success: c.success,
+      placeholder: c.placeholder,
+    };
+  }
 
   return {
     background: Platform.select({
       ios: Color.ios.systemBackground,
-      android: Color.android.dynamic.surface,
       default: isDark ? '#0F172A' : '#FFFFFF',
     }),
     surface: Platform.select({
       ios: Color.ios.secondarySystemBackground,
-      android: Color.android.dynamic.surface,
       default: isDark ? '#111827' : '#F8FAFC',
     }),
     text: Platform.select({
       ios: Color.ios.label,
-      android: Color.android.dynamic.onSurface,
       default: isDark ? '#E5E7EB' : '#111827',
     }),
     secondaryText: Platform.select({
       ios: Color.ios.secondaryLabel,
-      android: Color.android.dynamic.onSurface,
       default: isDark ? '#9CA3AF' : '#475569',
     }),
     primary: Platform.select({
       ios: Color.ios.systemBlue,
-      android: Color.android.dynamic.primary,
       default: '#2563EB',
     }),
     border: Platform.select({
       ios: Color.ios.separator,
-      android: Color.android.dynamic.outline,
       default: isDark ? '#334155' : '#D1D5DB',
     }),
     error: Platform.select({
       ios: Color.ios.systemRed,
-      android: Color.android.dynamic.error,
       default: '#DC2626',
     }),
     success: Platform.select({
       ios: Color.ios.systemGreen,
-      android: Color.android.dynamic.tertiary,
       default: '#16A34A',
     }),
     placeholder: Platform.select({
       ios: Color.ios.secondaryLabel,
-      android: Color.android.dynamic.onSurfaceVariant,
       default: '#94A3B8',
     }),
   };

@@ -86,6 +86,7 @@ export default function ChangePasswordScreen() {
 
   return (
     <SafeAreaView
+      edges={["bottom", "left", "right"]}
       style={[styles.container, { backgroundColor: colors.background }]}
     >
       <KeyboardAvoidingView
@@ -97,6 +98,9 @@ export default function ChangePasswordScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          contentInsetAdjustmentBehavior={
+            Platform.OS === "ios" ? "automatic" : undefined
+          }
         >
           <View
             style={[
@@ -104,7 +108,6 @@ export default function ChangePasswordScreen() {
               { backgroundColor: colors.surface, borderColor: colors.border },
             ]}
           >
-            <AppText style={styles.title}>Change password</AppText>
             <AppText muted>
               This screen is protected and only visible when you are logged in.
             </AppText>
@@ -186,10 +189,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
     gap: 12,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
   },
   message: {
     fontSize: 13,

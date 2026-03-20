@@ -90,14 +90,23 @@ export default function SignInScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      edges={['bottom', 'left', 'right']}
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentInsetAdjustmentBehavior={
+          Platform.OS === 'ios' ? 'automatic' : undefined
+        }
+      >
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <AppText style={styles.title}>Sign in</AppText>
           <AppText muted style={styles.subtitle}>Sign in to continue to your account.</AppText>
           <AuthIllustration variant="signIn" />
 
@@ -167,10 +176,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
     gap: 12,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
   },
   subtitle: {
     marginBottom: 8,
