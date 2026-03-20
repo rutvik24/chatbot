@@ -6,7 +6,7 @@ This folder contains the developer docs for the project.
 
 - [`setup.md`](setup.md) - prerequisites and how to run the app
 - [`project-structure.md`](project-structure.md) - how the codebase is organized
-- [`current-progress.md`](current-progress.md) - what’s implemented today vs gaps
+- [`current-progress.md`](current-progress.md) - what’s implemented today vs gaps (drawer, tab headers, chat UX)
 - [`ai-integration.md`](ai-integration.md) - OpenAI-compatible streaming
 - [`auth.md`](auth.md) - current authentication model (demo/local)
 - [`security-and-secrets.md`](security-and-secrets.md) - how API keys are stored and migrated

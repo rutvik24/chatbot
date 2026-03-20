@@ -42,6 +42,8 @@ Components should re-render when appearance changes — `useNativeThemeColors()`
 
 `src/app/_layout.tsx` passes `createAppNavigationTheme(resolvedColorScheme)` into `ThemeProvider` and uses **functional** `screenOptions={({ theme }) => ({ … })}` so native stack headers use the same `theme.colors` as the rest of the app. See [`project-structure.md`](project-structure.md).
 
+Signed-in **Chat** and **Settings** tabs use **`headerShown: false`** on the drawer/tabs shell; their top bars are **`TabScreenHeader`** (`src/components/tab-screen-header.tsx`), themed with **`useNativeThemeColors()`** (background, hairline border, title and icon tint) so they match stack-auth screens and the chat body.
+
 ## Markdown and chat bubbles
 
 `src/components/markdown-message.tsx`:

@@ -9,14 +9,19 @@ Expo Router **Stack** + **guards**:
 - **Signed out:** `sign-in`, `sign-up`, `forgot-password` (each with a **native** stack header, titles in `src/app/_layout.tsx`)
 - **Signed in:** **drawer** (`expo-router/drawer`) wraps **native tabs** (**Chat**, **Settings**); stack settings routes (native headers)
 
-**Sign in** is the root of the logged-out stack: **`headerBackVisible: false`** (no back). **Drawer + tabs** use `headerShown: false`.
+**Sign in** is the root of the logged-out stack: **`headerBackVisible: false`** (no back). **Drawer + native tabs** use `headerShown: false` on that shell; each tab screen renders its own **in-content** header (see below).
+
+### Tab screen headers (Chat & Settings)
+
+- **`TabScreenHeader`** (`src/components/tab-screen-header.tsx`) — centered **title** matching the tab (**Chat** / **Settings**) and a **☰** control that dispatches **`DrawerActions.openDrawer()`**.
+- Native **`NativeTabs.Trigger.Label`** still drives the **bottom tab bar** item titles; the header is separate (native tab screens don’t expose a stack-style title bar inside the tab content).
 
 Main routes:
 
 | Route | Purpose |
 |--------|---------|
-| `/(main)/(tabs)/index` | Chat: streaming replies, composer, model picker strip, scroll / catch-up UX; **menu** opens drawer (**New chat**) |
-| `/(main)/(tabs)/settings` | Profile & AI links, **Appearance** (system / light / dark), sign out, error-boundary test |
+| `/(main)/(tabs)/index` | Chat: **`TabScreenHeader`** “Chat”; streaming, composer, model picker strip, scroll / catch-up UX; **New chat** in drawer |
+| `/(main)/(tabs)/settings` | **`TabScreenHeader`** “Settings”; Profile & AI links, **Appearance**, sign out, error-boundary test; **☰** opens same drawer (**New chat**) |
 | `/(auth)/settings-ai` | API key, base URL (scroll; `SafeAreaView` edges bottom/left/right under header) |
 | `/(auth)/settings-profile` | Name fields for personalization system message |
 | `/(auth)/settings-security` | Change password + sign out |
@@ -40,8 +45,13 @@ Auth/settings scroll screens use **`SafeAreaView` `edges={['bottom','left','righ
 - **Model** — Modal list from `client.models.list()` when opened; selection stored per account; default model in `DEFAULT_CHAT_MODEL_ID` (`openai-compatible-chat.ts`).
 - **Scroll** — `shouldAutoScrollRef` + **stick-to-bottom** after send or **Catch up**; `onContentSizeChange` + scheduled `scrollToEnd` while following; wider cancel threshold while generating so layout jitter doesn’t drop follow mode.
 - **Catch up / Latest** — Floating button above the composer when not at bottom; **Catch up** variant while generating; docked with elevation so it stays visible on Android.
-- **UI** — Top **menu** opens drawer; day pills with calendar icon; message times; user primary bubble vs assistant surface bubble (shadows / elevation); unified composer card (outer shadow, inner clip).
-- **New chat** (drawer) — Aborts stream, clears messages/composer/error, closes model picker, resets scroll to top.
+- **UI** — **`TabScreenHeader`** (title + drawer); day pills with calendar icon; message times; user primary bubble vs assistant surface bubble (shadows / elevation); unified composer card (outer shadow, inner clip).
+- **New chat** (drawer) — Aborts stream, clears messages/composer/error, closes model picker, resets scroll to top; navigates to Chat tab; if Chat isn’t mounted, reset runs when the screen registers (**`ChatActionsProvider`** pending flag).
+
+## Settings (`/(main)/(tabs)/settings`)
+
+- **`TabScreenHeader`** — “Settings” + ☰ (drawer).
+- **`SectionList`** — `flex: 1` below the header; Appearance card, Account / AI sections, footer actions.
 
 ## Prompt / history
 

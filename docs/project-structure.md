@@ -3,8 +3,8 @@
 This project uses Expo Router (file-based routing) and a small set of well-separated layers:
 
 - `src/app/`: route entry points (screens) + root layout
-- `src/components/`: reusable UI components (buttons, inputs, markdown renderer, native tabs, etc.)
-- `src/ctx/`: app-wide React context (authentication/session, theme preference)
+- `src/components/`: reusable UI components (buttons, inputs, markdown renderer, native tabs wrapper, **tab screen header**, drawer content, etc.)
+- `src/ctx/`: app-wide React context (authentication/session, theme preference, **chat actions** for drawer → new chat)
 - `src/services/`: network + streaming logic for AI
 - `src/utils/`: helpers (AI credentials storage, env defaults, navigation theme, personalization, error mapping)
 - `src/constants/`: small shared constants (e.g. theme preference helpers)
@@ -17,8 +17,15 @@ Key files:
 - `src/app/_layout.tsx`: root layout; `ThemePreferenceProvider` → `SessionProvider` → React Navigation `ThemeProvider` with `createAppNavigationTheme()` → **native** `Stack` (themed headers on auth/settings, `headerShown: false` on the main drawer group and for hidden routes). Splash, toast, status bar.
 - `src/app/(main)/_layout.tsx`: **drawer** layout (`expo-router/drawer`) wrapping the tab group; custom drawer content (`src/components/main-drawer-content.tsx`) includes **New chat**; `ChatActionsProvider` (`src/ctx/chat-actions-context.tsx`) bridges drawer → chat reset.
 - `src/app/(main)/(tabs)/_layout.tsx`: tab navigator wrapper (`Chat`, `Settings`) via `NativeTabs` (`src/components/app-tabs.tsx`).
-- `src/app/(main)/(tabs)/index.tsx`: chat (streaming, composer + model strip, scroll/catch-up, day sections, timestamps, drawer menu control).
-- `src/app/(main)/(tabs)/settings.tsx`: settings (Appearance, Profile, AI, sign out, etc.).
+- `src/app/(main)/(tabs)/index.tsx`: chat (streaming, composer + model strip, scroll/catch-up, day sections, timestamps). Uses **`TabScreenHeader`** title **Chat** + drawer control.
+- `src/app/(main)/(tabs)/settings.tsx`: settings (Appearance, Profile, AI, sign out, etc.). Uses **`TabScreenHeader`** title **Settings** + same drawer control.
+
+Navigation-related components:
+
+- `src/components/app-tabs.tsx` — `expo-router/unstable-native-tabs` (`NativeTabs`) tab bar labels/icons for Chat & Settings.
+- `src/components/tab-screen-header.tsx` — shared top bar for tab roots: centered screen title + ☰ (`DrawerActions.openDrawer`).
+- `src/components/main-drawer-content.tsx` — drawer body: **New chat** + navigation back to Chat tab.
+- `src/ctx/chat-actions-context.tsx` — registers the chat screen’s reset handler; supports **pending** new chat when Chat isn’t mounted.
 
 Auth/settings routes:
 
