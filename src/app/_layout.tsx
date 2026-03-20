@@ -3,12 +3,15 @@ import { SplashScreen, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo } from "react";
 import { Platform, useColorScheme } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import ErrorBoundary from "@/components/error-boundary";
+import NetworkStatusBanner from "@/components/network-status-banner";
 import ToastOverlay from "@/components/toast-overlay";
 import { SessionProvider, useSession } from "@/ctx/auth-context";
 import { ChatHistoryProvider } from "@/ctx/chat-history-context";
+import { NetworkStateProvider } from "@/ctx/network-state-context";
 import {
   ThemePreferenceProvider,
   useThemePreference,
@@ -19,15 +22,19 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   return (
-    <ThemePreferenceProvider>
-      <SessionProvider>
-        <ChatHistoryProvider>
-          <ErrorBoundary>
-            <RootNavigator />
-          </ErrorBoundary>
-        </ChatHistoryProvider>
-      </SessionProvider>
-    </ThemePreferenceProvider>
+    <SafeAreaProvider>
+      <ThemePreferenceProvider>
+        <NetworkStateProvider>
+          <SessionProvider>
+            <ChatHistoryProvider>
+              <ErrorBoundary>
+                <RootNavigator />
+              </ErrorBoundary>
+            </ChatHistoryProvider>
+          </SessionProvider>
+        </NetworkStateProvider>
+      </ThemePreferenceProvider>
+    </SafeAreaProvider>
   );
 }
 
@@ -53,6 +60,7 @@ function RootNavigator() {
       />
       <AnimatedSplashOverlay />
       <ToastOverlay />
+      <NetworkStatusBanner />
       <Stack
         screenOptions={({ theme }) => ({
           headerShown: false,
@@ -83,14 +91,7 @@ function RootNavigator() {
           headerLargeTitleEnabled: false,
         })}
       >
-        {/**
-         * Deep link `chatapp://chat/<id>` — outside session guard so the URL opens even
-         * when logged out; the screen prompts sign-in or opens history when signed in.
-         */}
-        <Stack.Screen
-          name="chat/[sessionId]"
-          options={{ headerShown: false, animation: "fade" }}
-        />
+        <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Protected guard={!!session}>
           <Stack.Screen name="(main)" options={{ headerShown: false }} />
           <Stack.Screen
@@ -147,6 +148,14 @@ function RootNavigator() {
             }}
           />
         </Stack.Protected>
+        {/**
+         * Deep link `chatapp://chat/<id>` — declared last so it is not the stack’s initial route.
+         * Opens even when logged out; screen prompts sign-in or loads history when signed in.
+         */}
+        <Stack.Screen
+          name="chat/[sessionId]"
+          options={{ headerShown: false, animation: "fade" }}
+        />
       </Stack>
     </ThemeProvider>
   );

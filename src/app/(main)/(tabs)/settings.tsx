@@ -14,13 +14,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   View,
   useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppText } from "@/components/common";
+import MessageCopyPreferenceSwitch from "@/components/message-copy-preference-switch";
 import { TabScreenHeader } from "@/components/tab-screen-header";
 import type { ThemePreference } from "@/constants/theme-preference";
 import { useSession } from "@/ctx/auth-context";
@@ -536,24 +536,16 @@ export default function SettingsScreen() {
                   Off by default.
                 </AppText>
               </View>
-              <Switch
-                accessibilityLabel="Copy messages from chat bubbles"
+              <MessageCopyPreferenceSwitch
                 value={messageCopyEnabled}
                 onValueChange={(on) =>
                   setMessageCopyPref(on ? MESSAGE_COPY_ENABLED_VALUE : null)
                 }
-                trackColor={{
-                  false: colors.border,
-                  true: Platform.OS === "ios" ? undefined : colors.primary,
+                colors={{
+                  primary: colors.primary,
+                  border: colors.border,
+                  secondaryText: colors.secondaryText,
                 }}
-                thumbColor={
-                  Platform.OS === "android"
-                    ? messageCopyEnabled
-                      ? colors.primary
-                      : colors.secondaryText
-                    : undefined
-                }
-                ios_backgroundColor={colors.border}
               />
             </View>
           </SettingsCard>

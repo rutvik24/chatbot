@@ -5,8 +5,8 @@
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "generate-icons": "bun run scripts/generate-app-icons.ts"
@@ -28,6 +28,7 @@
     "expo-image": "~55.0.6",
     "expo-image-picker": "^55.0.13",
     "expo-linking": "~55.0.7",
+    "expo-network": "^55.0.9",
     "expo-router": "~55.0.6",
     "expo-secure-store": "^55.0.9",
     "expo-sharing": "^55.0.14",

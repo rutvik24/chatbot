@@ -40,6 +40,7 @@ import { TabScreenHeader } from "@/components/tab-screen-header";
 import { useChatActions } from "@/ctx/chat-actions-context";
 import { useChatHistory } from "@/ctx/chat-history-context";
 import { useSession } from "@/ctx/auth-context";
+import { useNetworkStateManager } from "@/ctx/network-state-context";
 import { useNativeThemeColors } from "@/hooks/use-native-theme-colors";
 import { useStorageState } from "@/hooks/use-storage-state";
 import {
@@ -98,6 +99,20 @@ export default function HomeScreen() {
   const navigation = useNavigation();
   const router = useRouter();
   const { session, isLoading: isSessionLoading } = useSession();
+  const { isOnline } = useNetworkStateManager();
+  const isOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
+
+  useEffect(() => {
+    if (!isOnline) return;
+    queueMicrotask(() => {
+      void processGenerationQueue();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- drain queued sends when connectivity returns
+  }, [isOnline]);
+
   const colors = useNativeThemeColors();
   const safeInsets = useSafeAreaInsets();
   const [text, setText] = useState("");
@@ -956,6 +971,11 @@ export default function HomeScreen() {
     const q = generationQueueRef.current;
     if (q.length === 0) return;
 
+    if (!isOnlineRef.current) {
+      setTimeout(() => void processGenerationQueue(), 2_500);
+      return;
+    }
+
     if (isSessionLoading || isMigratingKey) {
       setTimeout(() => void processGenerationQueue(), 200);
       return;
@@ -1129,6 +1149,13 @@ export default function HomeScreen() {
       return;
     }
 
+    if (!isOnlineRef.current) {
+      setError(
+        "You're offline. Reconnect, then try again from your edited message.",
+      );
+      return;
+    }
+
     setError(null);
 
     shouldAutoScrollRef.current = true;
@@ -1293,6 +1320,16 @@ export default function HomeScreen() {
       return;
     }
 
+    if (!isOnline) {
+      showToast({
+        variant: "error",
+        title: "No connection",
+        message:
+          "Check your network and tap Retry in the banner when you’re back online.",
+      });
+      return;
+    }
+
     if (isGeneratingRef.current) {
       generationQueueRef.current.push({
         type: "send",
@@ -1324,6 +1361,16 @@ export default function HomeScreen() {
         variant: "error",
         title: "Can’t save",
         message: "Write something first, or tap Cancel.",
+      });
+      return;
+    }
+
+    if (!isOnline) {
+      showToast({
+        variant: "error",
+        title: "No connection",
+        message:
+          "Reconnect and use Retry in the banner, then save your edit again.",
       });
       return;
     }
