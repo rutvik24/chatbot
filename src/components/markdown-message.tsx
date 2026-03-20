@@ -8,6 +8,11 @@ import { useNativeThemeColors } from '@/hooks/use-native-theme-colors';
 import { showToast } from '@/utils/toast-bus';
 
 /**
+ * Visual tone for markdown (e.g. user bubble on a solid primary background).
+ */
+export type MarkdownMessageTone = 'default' | 'onPrimary';
+
+/**
  * Props for {@link MarkdownMessage}.
  *
  * `markdown` is rendered using `react-native-markdown-display` and `markdown-it`.
@@ -18,27 +23,37 @@ export type MarkdownMessageProps = Omit<MarkdownProps, 'children'> & {
    * Markdown string to render (links, headings, lists, and code blocks).
    */
   markdown: string;
+  /**
+   * `onPrimary` uses light text and adjusted code/link colors for blue (or primary) bubbles.
+   */
+  tone?: MarkdownMessageTone;
 };
 
 function CopyableCodeBlock({
   code,
   stylesForFence,
   colors,
+  tone,
 }: {
   code: string;
   stylesForFence: any;
   colors: ReturnType<typeof useNativeThemeColors>;
+  tone: MarkdownMessageTone;
 }) {
+  const onPrimary = tone === 'onPrimary';
+  const codeColor = onPrimary ? 'rgba(255,255,255,0.96)' : colors.text;
+  const copyBorder = onPrimary ? 'rgba(255,255,255,0.45)' : colors.border;
+  const copyLabel = onPrimary ? 'rgba(255,255,255,0.98)' : colors.primary;
+
   return (
     <View style={{ marginTop: 8, marginBottom: 8 }}>
       <Text
         style={[
           stylesForFence,
-          // Ensure code remains readable on both light/dark themes.
           {
-            color: colors.text,
+            color: codeColor,
             fontFamily: Platform.select({ ios: 'Courier', default: 'monospace' }),
-            lineHeight: 18,
+            lineHeight: 20,
           },
         ]}>
         {code}
@@ -60,9 +75,10 @@ function CopyableCodeBlock({
           paddingVertical: 6,
           borderRadius: 10,
           borderWidth: 1,
-          borderColor: colors.border,
+          borderColor: copyBorder,
+          backgroundColor: onPrimary ? 'rgba(0,0,0,0.2)' : undefined,
         }}>
-        <Text style={{ color: colors.primary, fontWeight: '800', fontSize: 12 }}>Copy</Text>
+        <Text style={{ color: copyLabel, fontWeight: '800', fontSize: 12 }}>Copy</Text>
       </Pressable>
 
     </View>
@@ -78,9 +94,11 @@ function CopyableCodeBlock({
  */
 export default function MarkdownMessage({
   markdown,
+  tone = 'default',
   ...rest
 }: MarkdownMessageProps) {
   const colors = useNativeThemeColors();
+  const onPrimary = tone === 'onPrimary';
 
   const markdownit = useMemo(
     () =>
@@ -109,6 +127,7 @@ export default function MarkdownMessage({
             key={node.key}
             stylesForFence={styles.fence}
             colors={colors}
+            tone={tone}
           />
         ),
       // Indented code blocks.
@@ -119,93 +138,121 @@ export default function MarkdownMessage({
             key={node.key}
             stylesForFence={styles.code_block}
             colors={colors}
+            tone={tone}
           />
         ),
     };
-  }, [colors]);
+  }, [colors, tone]);
+
+  const text = onPrimary ? 'rgba(255,255,255,0.96)' : colors.text;
+  const link = onPrimary ? 'rgba(255,255,255,0.98)' : colors.primary;
+  const codeBg = onPrimary ? 'rgba(0,0,0,0.28)' : colors.surface;
+  const codeBorder = onPrimary ? 'rgba(255,255,255,0.28)' : colors.border;
+
+  const markdownStyles = useMemo(
+    () => ({
+      body: { color: text, lineHeight: 22, fontSize: 16 },
+      link: {
+        color: link,
+        textDecorationLine: 'underline' as const,
+        textDecorationColor: onPrimary ? 'rgba(255,255,255,0.55)' : undefined,
+      },
+      heading1: {
+        color: text,
+        fontSize: 22,
+        fontWeight: '800' as const,
+        lineHeight: 30,
+        marginTop: 6,
+        marginBottom: 4,
+      },
+      heading2: {
+        color: text,
+        fontSize: 18,
+        fontWeight: '800' as const,
+        lineHeight: 26,
+        marginTop: 6,
+        marginBottom: 4,
+      },
+      heading3: {
+        color: text,
+        fontSize: 16,
+        fontWeight: '800' as const,
+        lineHeight: 24,
+        marginTop: 6,
+        marginBottom: 4,
+      },
+      heading4: {
+        color: text,
+        fontSize: 15,
+        fontWeight: '800' as const,
+        lineHeight: 22,
+        marginTop: 6,
+        marginBottom: 3,
+      },
+      heading5: {
+        color: text,
+        fontSize: 14,
+        fontWeight: '800' as const,
+        lineHeight: 21,
+        marginTop: 6,
+        marginBottom: 3,
+      },
+      heading6: {
+        color: text,
+        fontSize: 13,
+        fontWeight: '800' as const,
+        lineHeight: 19,
+        marginTop: 6,
+        marginBottom: 3,
+      },
+      bullet_list: { marginTop: 4, marginBottom: 4 },
+      ordered_list: { marginTop: 4, marginBottom: 4 },
+      list_item: { marginTop: 2, marginBottom: 2 },
+      paragraph: { marginTop: 0, marginBottom: 8 },
+      code_inline: {
+        backgroundColor: onPrimary ? 'rgba(255,255,255,0.22)' : colors.surface,
+        borderWidth: 1,
+        borderColor: codeBorder,
+        paddingHorizontal: 7,
+        paddingVertical: 3,
+        borderRadius: 8,
+        color: text,
+      },
+      code_block: {
+        backgroundColor: codeBg,
+        borderWidth: 1,
+        borderColor: codeBorder,
+        borderRadius: 14,
+        padding: 10,
+      },
+      fence: {
+        backgroundColor: codeBg,
+        borderWidth: 1,
+        borderColor: codeBorder,
+        borderRadius: 14,
+        padding: 10,
+      },
+      pre: {
+        backgroundColor: codeBg,
+        borderRadius: 14,
+      },
+      blockquote: {
+        borderLeftWidth: 3,
+        borderLeftColor: onPrimary ? 'rgba(255,255,255,0.45)' : colors.primary,
+        paddingLeft: 10,
+        marginVertical: 6,
+        opacity: onPrimary ? 0.95 : 1,
+      },
+    }),
+    [codeBg, codeBorder, colors, link, onPrimary, text],
+  );
 
   return (
     <Markdown
       {...rest}
       markdownit={markdownit}
       rules={rules as any}
-      style={{
-        body: { color: colors.text, lineHeight: 20 },
-        link: { color: colors.primary },
-        heading1: {
-          color: colors.text,
-          fontSize: 22,
-          fontWeight: '800',
-          lineHeight: 30,
-          marginTop: 6,
-          marginBottom: 4,
-        },
-        heading2: {
-          color: colors.text,
-          fontSize: 18,
-          fontWeight: '800',
-          lineHeight: 26,
-          marginTop: 6,
-          marginBottom: 4,
-        },
-        heading3: {
-          color: colors.text,
-          fontSize: 16,
-          fontWeight: '800',
-          lineHeight: 24,
-          marginTop: 6,
-          marginBottom: 4,
-        },
-        heading4: {
-          color: colors.text,
-          fontSize: 14,
-          fontWeight: '800',
-          lineHeight: 22,
-          marginTop: 6,
-          marginBottom: 3,
-        },
-        heading5: {
-          color: colors.text,
-          fontSize: 13,
-          fontWeight: '800',
-          lineHeight: 21,
-          marginTop: 6,
-          marginBottom: 3,
-        },
-        heading6: {
-          color: colors.text,
-          fontSize: 12,
-          fontWeight: '800',
-          lineHeight: 18,
-          marginTop: 6,
-          marginBottom: 3,
-        },
-        code_inline: {
-          backgroundColor: colors.surface,
-          borderWidth: 1,
-          borderColor: colors.border,
-          paddingHorizontal: 6,
-          paddingVertical: 2,
-          borderRadius: 8,
-          color: colors.text,
-        },
-        code_block: {
-          backgroundColor: colors.surface,
-          borderWidth: 1,
-          borderColor: colors.border,
-          borderRadius: 12,
-        },
-        fence: {
-          backgroundColor: colors.surface,
-          borderWidth: 1,
-          borderColor: colors.border,
-          borderRadius: 12,
-        },
-        pre: {
-          backgroundColor: colors.surface,
-          borderRadius: 12,
-        },
-      }}>
+      style={markdownStyles}>
       {typeof markdown === 'string' ? markdown : String(markdown)}
     </Markdown>
   );

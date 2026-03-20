@@ -581,11 +581,28 @@ export default function HomeScreen() {
                     {
                       backgroundColor: colors.surface,
                       borderColor: colors.border,
+                      ...Platform.select({
+                        ios: {
+                          shadowColor: "#000",
+                          shadowOffset: { width: 0, height: 1 },
+                          shadowOpacity: 0.06,
+                          shadowRadius: 4,
+                        },
+                        default: { elevation: 1 },
+                      }),
                     },
                   ]}
                 >
+                  <SymbolView
+                    name={{
+                      ios: "calendar",
+                      android: "calendar_today",
+                      web: "calendar_today",
+                    }}
+                    size={15}
+                    tintColor={colors.secondaryText}
+                  />
                   <AppText
-                    muted
                     style={[styles.daySectionLabel, { color: colors.secondaryText }]}
                   >
                     {item.label}
@@ -603,31 +620,82 @@ export default function HomeScreen() {
                 style={[
                   styles.messageColumn,
                   item.role === "user"
-                    ? { alignSelf: "flex-end" }
-                    : { alignSelf: "flex-start" },
+                    ? styles.messageColumnUser
+                    : styles.messageColumnAssistant,
                 ]}
               >
                 <View
                   style={[
                     styles.messageBubble,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                      borderTopLeftRadius: item.role === "user" ? 16 : 2,
-                      borderTopRightRadius: item.role === "user" ? 2 : 16,
-                      borderBottomLeftRadius: 16,
-                      borderBottomRightRadius: 16,
-                    },
+                    item.role === "user"
+                      ? {
+                          backgroundColor: colors.primary,
+                          borderWidth: 0,
+                          borderTopLeftRadius: 22,
+                          borderTopRightRadius: 10,
+                          borderBottomLeftRadius: 22,
+                          borderBottomRightRadius: 22,
+                          ...Platform.select({
+                            ios: {
+                              shadowColor: colors.primary,
+                              shadowOffset: { width: 0, height: 3 },
+                              shadowOpacity: 0.28,
+                              shadowRadius: 8,
+                            },
+                            android: { elevation: 3 },
+                            default: {
+                              shadowColor: "#2563EB",
+                              shadowOffset: { width: 0, height: 2 },
+                              shadowOpacity: 0.22,
+                              shadowRadius: 6,
+                            },
+                          }),
+                        }
+                      : {
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                          borderTopLeftRadius: 10,
+                          borderTopRightRadius: 22,
+                          borderBottomLeftRadius: 22,
+                          borderBottomRightRadius: 22,
+                          ...Platform.select({
+                            ios: {
+                              shadowColor: "#000",
+                              shadowOffset: { width: 0, height: 2 },
+                              shadowOpacity: 0.07,
+                              shadowRadius: 10,
+                            },
+                            android: { elevation: 2 },
+                            default: {
+                              shadowColor: "#000",
+                              shadowOffset: { width: 0, height: 1 },
+                              shadowOpacity: 0.08,
+                              shadowRadius: 8,
+                            },
+                          }),
+                        },
                   ]}
                 >
-                  <MarkdownMessage
-                    markdown={
-                      item.content || (item.role === "assistant" ? "..." : "")
-                    }
-                  />
+                  {item.role === "assistant" &&
+                  (!item.content || item.content === "...") ? (
+                    <AppText
+                      style={[
+                        styles.assistantThinking,
+                        { color: colors.secondaryText },
+                      ]}
+                    >
+                      Thinking…
+                    </AppText>
+                  ) : (
+                    <MarkdownMessage
+                      tone={item.role === "user" ? "onPrimary" : "default"}
+                      markdown={
+                        item.content || (item.role === "assistant" ? "..." : "")
+                      }
+                    />
+                  )}
                 </View>
                 <AppText
-                  muted
                   style={[
                     styles.messageTime,
                     {
@@ -643,28 +711,141 @@ export default function HomeScreen() {
           }
         />
 
-        <View style={styles.modelRowWrap}>
+        <View
+          style={[
+            styles.composerCard,
+            {
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+            },
+          ]}
+        >
+          <View style={styles.composerInputRow}>
+            <TextInput
+              ref={composerInputRef}
+              placeholder="Message…"
+              placeholderTextColor={colors.placeholder as string}
+              value={text}
+              onChangeText={setText}
+              multiline
+              textAlignVertical="top"
+              style={[
+                styles.input,
+                {
+                  color: colors.text,
+                },
+              ]}
+              onSubmitEditing={() => {
+                if (isGenerating) return;
+                void handleSend();
+              }}
+              returnKeyType="default"
+            />
+            <Pressable
+              onPress={isGenerating ? handleStop : handleSend}
+              disabled={!isGenerating && !canSend}
+              style={({ pressed }) => [
+                styles.sendButton,
+                {
+                  backgroundColor: isGenerating
+                    ? colors.error
+                    : canSend
+                      ? colors.primary
+                      : colors.border,
+                  opacity: pressed ? 0.9 : 1,
+                },
+              ]}
+            >
+              <SymbolView
+                name={
+                  isGenerating
+                    ? { ios: "stop.fill", android: "stop", web: "stop" }
+                    : { ios: "paperplane.fill", android: "send", web: "send" }
+                }
+                size={18}
+                tintColor="#FFFFFF"
+              />
+            </Pressable>
+          </View>
+
+          {!effectiveOpenRouterKey.trim() ? (
+            <View style={styles.composerInlineHintWrap}>
+              <AppText
+                muted
+                style={[styles.composerInlineHintText, { color: colors.secondaryText }]}
+              >
+                Settings → AI settings → save your key, then pick a model below.
+              </AppText>
+            </View>
+          ) : modelsStatus === "error" && modelsErrorMessage ? (
+            <Pressable
+              onPress={handleRetryLoadModels}
+              style={styles.composerInlineHintWrap}
+              accessibilityRole="button"
+              accessibilityLabel="Retry loading models"
+            >
+              <AppText
+                style={[styles.composerInlineHintText, { color: colors.error }]}
+                numberOfLines={2}
+              >
+                Models didn’t load. Tap to retry.
+              </AppText>
+            </Pressable>
+          ) : null}
+
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Choose AI model"
+            accessibilityState={{ disabled: !effectiveOpenRouterKey.trim() }}
             onPress={() => {
               setModelSearch("");
               setModelPickerOpen(true);
             }}
             disabled={!effectiveOpenRouterKey.trim()}
-            style={[
-              styles.modelPickerTrigger,
+            style={({ pressed }) => [
+              styles.composerModelStrip,
               {
-                borderColor: colors.border,
-                backgroundColor: colors.surface,
-                opacity: effectiveOpenRouterKey.trim() ? 1 : 0.55,
+                borderTopColor: colors.border,
+                opacity: !effectiveOpenRouterKey.trim()
+                  ? 0.65
+                  : pressed
+                    ? 0.92
+                    : 1,
               },
             ]}
           >
-            <AppText
-              numberOfLines={1}
-              style={[styles.modelPickerLabel, { color: colors.text }]}
+            <View
+              style={[
+                styles.composerModelIconWrap,
+                { backgroundColor: colors.background },
+              ]}
             >
-              {effectiveChatModelId}
-            </AppText>
+              <SymbolView
+                name={{
+                  ios: "sparkles",
+                  android: "auto_awesome",
+                  web: "auto_awesome",
+                }}
+                size={18}
+                tintColor={colors.primary}
+              />
+            </View>
+            <View style={styles.composerModelTextCol}>
+              <AppText
+                muted
+                style={[styles.composerModelCaption, { color: colors.secondaryText }]}
+              >
+                Model
+              </AppText>
+              <AppText
+                numberOfLines={1}
+                style={[styles.composerModelName, { color: colors.text }]}
+              >
+                {effectiveOpenRouterKey.trim()
+                  ? effectiveChatModelId
+                  : "Add an API key to chat"}
+              </AppText>
+            </View>
             {modelsStatus === "loading" ? (
               <ActivityIndicator size="small" color={colors.primary} />
             ) : (
@@ -674,74 +855,10 @@ export default function HomeScreen() {
                   android: "expand_more",
                   web: "expand_more",
                 }}
-                size={16}
+                size={18}
                 tintColor={colors.secondaryText}
               />
             )}
-          </Pressable>
-          {!effectiveOpenRouterKey.trim() ? (
-            <AppText muted style={styles.modelHint}>
-              Add an API key in Settings → AI settings to load models.
-            </AppText>
-          ) : modelsStatus === "error" && modelsErrorMessage ? (
-            <AppText
-              style={[styles.modelHint, { color: colors.error }]}
-              numberOfLines={2}
-            >
-              {modelsErrorMessage}
-            </AppText>
-          ) : null}
-        </View>
-
-        <View
-          style={[
-            styles.composer,
-            { borderColor: colors.border, backgroundColor: colors.surface },
-          ]}
-        >
-          <TextInput
-            ref={composerInputRef}
-            placeholder="Type a message..."
-            placeholderTextColor={colors.placeholder as string}
-            value={text}
-            onChangeText={setText}
-            multiline
-            textAlignVertical="top"
-            style={[
-              styles.input,
-              {
-                color: colors.text,
-              },
-            ]}
-            onSubmitEditing={() => {
-              if (isGenerating) return;
-              void handleSend();
-            }}
-            returnKeyType="send"
-          />
-          <Pressable
-            onPress={isGenerating ? handleStop : handleSend}
-            disabled={!isGenerating && !canSend}
-            style={[
-              styles.sendButton,
-              {
-                backgroundColor: isGenerating
-                  ? colors.error
-                  : canSend
-                    ? colors.primary
-                    : colors.border,
-              },
-            ]}
-          >
-            <SymbolView
-              name={
-                isGenerating
-                  ? { ios: "stop.fill", android: "stop", web: "stop" }
-                  : { ios: "paperplane.fill", android: "send", web: "send" }
-              }
-              size={16}
-              tintColor="#FFFFFF"
-            />
           </Pressable>
         </View>
 
@@ -949,49 +1066,68 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   messagesContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-    gap: 8,
+    paddingHorizontal: 14,
+    paddingTop: 20,
+    paddingBottom: 16,
+    gap: 14,
   },
   daySection: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 16,
     width: "100%",
-    gap: 10,
+    gap: 12,
   },
   daySectionLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    opacity: 0.85,
+    opacity: 0.55,
   },
   dayPill: {
     flexShrink: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 5,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
-    maxWidth: "72%",
+    maxWidth: "78%",
   },
   daySectionLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    textAlign: "center",
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
   messageColumn: {
-    maxWidth: "85%",
-    gap: 4,
+    maxWidth: "88%",
+    gap: 6,
+  },
+  messageColumnUser: {
+    alignSelf: "flex-end",
+    paddingLeft: 36,
+  },
+  messageColumnAssistant: {
+    alignSelf: "flex-start",
+    paddingRight: 36,
   },
   messageBubble: {
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  assistantThinking: {
+    fontSize: 15,
+    fontStyle: "italic",
+    fontWeight: "500",
+    lineHeight: 22,
   },
   messageTime: {
     fontSize: 11,
-    fontWeight: "500",
-    paddingHorizontal: 4,
+    fontWeight: "600",
+    paddingHorizontal: 6,
+    opacity: 0.92,
+    fontVariant: ["tabular-nums"],
   },
   errorText: {
     paddingHorizontal: 16,
@@ -1007,53 +1143,84 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
   },
-  composer: {
-    margin: 12,
-    borderWidth: 1,
-    borderRadius: 14,
-    minHeight: 48,
-    paddingLeft: 12,
-    paddingRight: 6,
+  /** Single card: message field + send, then model strip — input first, model below. */
+  composerCard: {
+    marginHorizontal: 12,
+    marginBottom: 10,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderRadius: 20,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  composerModelStrip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  composerModelIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  composerModelTextCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  composerModelCaption: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  composerModelName: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  composerInlineHintWrap: {
+    paddingHorizontal: 14,
+    paddingTop: 4,
+    paddingBottom: 6,
+  },
+  composerInlineHintText: {
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16,
+  },
+  composerInputRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 10,
+    paddingLeft: 14,
+    paddingRight: 10,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
   input: {
     flex: 1,
     fontSize: 16,
-    paddingVertical: 8,
-    maxHeight: 48,
+    lineHeight: 22,
+    paddingVertical: 10,
+    paddingRight: 4,
+    minHeight: 44,
+    maxHeight: 128,
   },
   sendButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-  },
-  modelRowWrap: {
-    paddingHorizontal: 12,
-    paddingBottom: 4,
-    gap: 6,
-  },
-  modelPickerTrigger: {
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  modelPickerLabel: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  modelHint: {
-    fontSize: 12,
-    fontWeight: "600",
-    paddingHorizontal: 2,
   },
   modalRoot: {
     flex: 1,
