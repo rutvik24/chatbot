@@ -51,7 +51,8 @@ Auth/settings scroll screens use **`SafeAreaView` `edges={['bottom','left','righ
 ## Settings (`/(main)/(tabs)/settings`)
 
 - **`TabScreenHeader`** — “Settings” + ☰ (drawer).
-- **`SectionList`** — `flex: 1` below the header; Appearance card, Account / AI sections, footer actions.
+- **`ScrollView`** — profile **hero card** (avatar initial, signed-in email, tap → Profile); **Appearance** as three **chips** (System / Light / Dark) with icons; **Account** and **Security** grouped cards with icon rows, titles, short descriptions, and chevrons; outlined **Sign out** + helper copy; **sign-out modal** with icon, clearer title/body, Cancel / Sign out.
+- **`__DEV__`** — ErrorBoundary test is a small footer link (not a primary row).
 
 ## Prompt / history
 
