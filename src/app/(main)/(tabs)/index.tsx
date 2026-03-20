@@ -17,6 +17,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   TextInput,
   View,
@@ -67,6 +68,8 @@ import {
 } from "@/utils/chat-message-copy-preference";
 import { getChatLaunchPreference } from "@/utils/chat-launch-preference";
 import { showToast } from "@/utils/toast-bus";
+import { takePendingChatDeepLink } from "@/utils/chat-deeplink-pending";
+import { buildChatDeepLink } from "@/utils/chat-share-link";
 import {
   getFriendlyChatProviderError,
   logChatProviderError,
@@ -226,7 +229,8 @@ export default function HomeScreen() {
     modelsListCacheRef.current = null;
   }, [effectiveAiApiKey, storedOpenAiBaseUrl]);
 
-  const { notifyPersisted, registerApplyHistorySession } = useChatHistory();
+  const { notifyPersisted, registerApplyHistorySession, openHistorySession } =
+    useChatHistory();
 
   useEffect(() => {
     if (!session) {
@@ -304,6 +308,23 @@ export default function HomeScreen() {
     historyHydrated,
     notifyPersisted,
   ]);
+
+  /** Open thread after sign-in when user followed `chat/<id>` while logged out. */
+  useEffect(() => {
+    if (!session || !historyHydrated) return;
+    const pending = takePendingChatDeepLink();
+    if (!pending) return;
+    void openHistorySession(pending).then((ok) => {
+      if (!ok) {
+        showToast({
+          variant: "info",
+          title: "Chat not found",
+          message:
+            "That conversation isn’t in your history on this device yet.",
+        });
+      }
+    });
+  }, [session, historyHydrated, openHistorySession]);
 
   const composerSubmitDisabled = useMemo(
     () =>
@@ -1319,6 +1340,58 @@ export default function HomeScreen() {
     return () => registerApplyHistorySession(null);
   }, [registerApplyHistorySession, snapChatListToBottom]);
 
+  const handleShareChat = useCallback(async () => {
+    if (!session || !chatSessionId || !historyHydrated) {
+      showToast({
+        variant: "info",
+        title: "Not ready",
+        message: "Wait for chat to load, then try sharing again.",
+      });
+      return;
+    }
+    try {
+      await persistChatSession(session, {
+        activeSessionId: chatSessionId,
+        currentSessionId: chatSessionId,
+        messages,
+        modelId: effectiveChatModelId,
+      });
+      notifyPersisted();
+    } catch {
+      // Link is still valid; history save can retry in the background.
+    }
+    const url = buildChatDeepLink(chatSessionId);
+    if (!url) {
+      showToast({
+        variant: "error",
+        title: "Couldn’t build link",
+        message: "Try again in a moment.",
+      });
+      return;
+    }
+    const message = `Open this chat in the app (same account & device history):\n${url}`;
+    try {
+      await Share.share(
+        Platform.OS === "ios"
+          ? { message, url }
+          : { message },
+      );
+    } catch {
+      showToast({
+        variant: "error",
+        title: "Couldn’t share",
+        message: "Sharing was cancelled or failed.",
+      });
+    }
+  }, [
+    session,
+    chatSessionId,
+    historyHydrated,
+    messages,
+    effectiveChatModelId,
+    notifyPersisted,
+  ]);
+
   const openDrawer = useCallback(() => {
     navigation.dispatch(DrawerActions.openDrawer());
   }, [navigation]);
@@ -1360,6 +1433,8 @@ export default function HomeScreen() {
         title="Chat"
         subtitle="Streaming · Private on device"
         onMenuPress={openDrawer}
+        onRightPress={handleShareChat}
+        rightAccessibilityLabel="Share chat link"
       />
       <KeyboardAvoidingView
         style={styles.keyboardRoot}

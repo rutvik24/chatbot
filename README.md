@@ -13,6 +13,7 @@ Expo Router chat app with per-user **OpenAI-compatible** AI streaming (any gatew
 - [`docs/auth.md`](docs/auth.md)
 - [`docs/security-and-secrets.md`](docs/security-and-secrets.md)
 - [`docs/theming.md`](docs/theming.md)
+- [`docs/deep-links.md`](docs/deep-links.md) — share links, `exp://` + `bunx uri-scheme` for Expo Go, `chatapp://` for dev builds
 
 ## Current Progress (Snapshot)
 

@@ -33,7 +33,8 @@ type ChatHistoryContextValue = {
   /** Debounced refresh after the chat screen persists (avoids decrypting on every token). */
   notifyPersisted: () => void;
   registerApplyHistorySession: (handler: ApplyHandler) => void;
-  openHistorySession: (sessionId: string) => Promise<void>;
+  /** Loads a thread from local history if it exists. Returns whether it was found. */
+  openHistorySession: (sessionId: string) => Promise<boolean>;
   deleteHistorySession: (sessionId: string) => Promise<void>;
 };
 
@@ -89,12 +90,12 @@ export function ChatHistoryProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const openHistorySession = useCallback(
-    async (sessionId: string) => {
-      if (!session) return;
+    async (sessionId: string): Promise<boolean> => {
+      if (!session) return false;
       const entry = await getStoredChatSession(session, sessionId);
       if (!entry) {
         await refreshSummaries();
-        return;
+        return false;
       }
       await setActiveChatSession(session, sessionId);
       applyRef.current?.({
@@ -102,6 +103,7 @@ export function ChatHistoryProvider({ children }: { children: ReactNode }) {
         messages: entry.messages,
       });
       void refreshSummaries();
+      return true;
     },
     [session, refreshSummaries],
   );

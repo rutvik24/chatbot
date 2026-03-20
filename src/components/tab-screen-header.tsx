@@ -10,6 +10,9 @@ export type TabScreenHeaderProps = {
   /** Optional one-line hint under the title (e.g. Chat only). */
   subtitle?: string;
   onMenuPress: () => void;
+  /** Optional trailing control (e.g. Chat share). */
+  onRightPress?: () => void;
+  rightAccessibilityLabel?: string;
 };
 
 /**
@@ -19,6 +22,8 @@ export function TabScreenHeader({
   title,
   subtitle,
   onMenuPress,
+  onRightPress,
+  rightAccessibilityLabel = "More actions",
 }: TabScreenHeaderProps) {
   useColorScheme();
   const colors = useNativeThemeColors();
@@ -67,7 +72,27 @@ export function TabScreenHeader({
           </AppText>
         ) : null}
       </View>
-      <View style={styles.sideSlot} />
+      {onRightPress ? (
+        <Pressable
+          onPress={onRightPress}
+          accessibilityRole="button"
+          accessibilityLabel={rightAccessibilityLabel}
+          hitSlop={12}
+          style={styles.sideSlot}
+        >
+          <SymbolView
+            name={{
+              ios: "square.and.arrow.up",
+              android: "share",
+              web: "share",
+            }}
+            size={22}
+            tintColor={colors.text}
+          />
+        </Pressable>
+      ) : (
+        <View style={styles.sideSlot} />
+      )}
     </View>
   );
 }

@@ -8,6 +8,7 @@ import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import ErrorBoundary from "@/components/error-boundary";
 import ToastOverlay from "@/components/toast-overlay";
 import { SessionProvider, useSession } from "@/ctx/auth-context";
+import { ChatHistoryProvider } from "@/ctx/chat-history-context";
 import {
   ThemePreferenceProvider,
   useThemePreference,
@@ -20,9 +21,11 @@ export default function RootLayout() {
   return (
     <ThemePreferenceProvider>
       <SessionProvider>
-        <ErrorBoundary>
-          <RootNavigator />
-        </ErrorBoundary>
+        <ChatHistoryProvider>
+          <ErrorBoundary>
+            <RootNavigator />
+          </ErrorBoundary>
+        </ChatHistoryProvider>
       </SessionProvider>
     </ThemePreferenceProvider>
   );
@@ -80,6 +83,14 @@ function RootNavigator() {
           headerLargeTitleEnabled: false,
         })}
       >
+        {/**
+         * Deep link `chatapp://chat/<id>` — outside session guard so the URL opens even
+         * when logged out; the screen prompts sign-in or opens history when signed in.
+         */}
+        <Stack.Screen
+          name="chat/[sessionId]"
+          options={{ headerShown: false, animation: "fade" }}
+        />
         <Stack.Protected guard={!!session}>
           <Stack.Screen name="(main)" options={{ headerShown: false }} />
           <Stack.Screen
